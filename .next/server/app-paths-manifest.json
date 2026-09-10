@@ -1,0 +1,11 @@
+{
+  "/api/sales/[id]/route": "app/api/sales/[id]/route.js",
+  "/api/devices/route": "app/api/devices/route.js",
+  "/api/sales/route": "app/api/sales/route.js",
+  "/api/clients/route": "app/api/clients/route.js",
+  "/api/batches/route": "app/api/batches/route.js",
+  "/api/refurb-centers/route": "app/api/refurb-centers/route.js",
+  "/api/refurb-centers/payments/route": "app/api/refurb-centers/payments/route.js",
+  "/refurb/page": "app/refurb/page.js",
+  "/page": "app/page.js"
+}
