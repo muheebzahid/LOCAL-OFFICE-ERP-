@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import {
-  Plus, Search, X, Printer, ChevronDown, ChevronUp, Pencil, Trash2, Check,
+  Zap, Plus, Search, X, Printer, ChevronDown, ChevronUp, Pencil, Trash2, Check,
   AlertCircle, Package, ShoppingCart, Wrench, DollarSign, Download, Building2,
   RotateCcw, FileText, Barcode, ShieldCheck, CheckCircle2, XCircle, Lock, Clock, Tag,
   QrCode, LayoutDashboard, Layers, ShieldAlert, ArrowRight, ArrowLeft, FileSpreadsheet,
@@ -166,6 +166,21 @@ export default function InventoryDashboardPage() {
   const [billNotes, setBillNotes] = useState('')
   const [submittingBill, setSubmittingBill] = useState(false)
   const [viewClientStatement, setViewClientStatement] = useState<Client | null>(null)
+
+  // Rapid Barcode / IMEI Scanner Intake State
+  const [showRapidScanModal, setShowRapidScanModal] = useState(false)
+  const [rapidPreset, setRapidPreset] = useState({
+    model: '15 PRO',
+    storage: '128GB',
+    color: 'BLACK',
+    costAed: '1400',
+    faults: ''
+  })
+  const [rapidImeiInput, setRapidImeiInput] = useState('')
+  const [rapidSessionDevices, setRapidSessionDevices] = useState<Device[]>([])
+  const [rapidSubmitting, setRapidSubmitting] = useState(false)
+  const [rapidErr, setRapidErr] = useState('')
+  const rapidInputRef = useRef<HTMLInputElement>(null)
 
   // Modals state
   const [showAdd, setShowAdd] = useState(false)
@@ -571,6 +586,42 @@ export default function InventoryDashboardPage() {
       showToast(`📍 Located IMEI ${target.imei} (${target.model}). Move to Commercial Invoice!`)
     }
     setSalesScanImei('')
+  }
+
+  async function handleRapidScanSubmit(e?: React.FormEvent) {
+    if (e) e.preventDefault()
+    const imei = rapidImeiInput.trim()
+    if (!imei) return
+    setRapidErr('')
+    setRapidSubmitting(true)
+
+    const res = await fetch('/api/devices', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        imei,
+        model: rapidPreset.model,
+        storage: rapidPreset.storage,
+        color: rapidPreset.color,
+        costAed: Number(rapidPreset.costAed) || 0,
+        faults: rapidPreset.faults,
+        status: 'RAW_STOCK'
+      })
+    })
+    const data = await res.json()
+    setRapidSubmitting(false)
+
+    if (res.ok) {
+      setDevices(prev => [data, ...prev])
+      setRapidSessionDevices(prev => [data, ...prev])
+      setRapidImeiInput('')
+      showToast(`⚡ Rapid Intake: ${data.model} (${data.imei.slice(-4)}) added to Raw Stock!`)
+      setTimeout(() => {
+        if (rapidInputRef.current) rapidInputRef.current.focus()
+      }, 50)
+    } else {
+      setRapidErr(data.error || 'Failed to intake IMEI')
+    }
   }
 
   async function handleCreateClientSubmit(e: React.FormEvent) {
@@ -1019,6 +1070,12 @@ export default function InventoryDashboardPage() {
               </button>
               <button onClick={() => setShowImport(true)} className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-sm">
                 <Download className="w-4 h-4" /> Import Stock
+              </button>
+              <button
+                onClick={() => { setShowRapidScanModal(true); setTimeout(() => rapidInputRef.current?.focus(), 100) }}
+                className="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs px-3.5 py-2 rounded-xl transition shadow-sm animate-pulse"
+              >
+                <Zap className="w-4 h-4 fill-slate-950" /> ⚡ Rapid IMEI Scan Intake
               </button>
               <button onClick={() => setShowAdd(true)} className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-sm">
                 <Plus className="w-4 h-4" /> Add Device
@@ -4151,6 +4208,196 @@ export default function InventoryDashboardPage() {
                 <button type="submit" disabled={savingEditCenter} className="px-5 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold">{savingEditCenter ? 'Saving...' : 'Save Changes'}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* RAPID BARCODE / IMEI SCANNER INTAKE MODAL */}
+      {showRapidScanModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 overflow-y-auto font-sans">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden text-white">
+            <div className="bg-slate-950 px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-amber-500 text-slate-950 rounded-xl font-black">
+                  <Zap className="w-5 h-5 fill-slate-950" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-black text-white flex items-center gap-2">
+                    RAPID BARCODE / IMEI STOCK INTAKE
+                    <span className="text-xs bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-500/30 font-bold">LIVE SCANNER DESK</span>
+                  </h2>
+                  <p className="text-xs text-slate-400 font-medium">Set batch defaults once, then continuously scan 15-digit IMEI barcodes to intake Raw Stock.</p>
+                </div>
+              </div>
+              <button onClick={() => setShowRapidScanModal(false)} className="text-slate-400 hover:text-white p-1 rounded-lg">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-2xl space-y-3">
+                <p className="text-[11px] font-black uppercase tracking-wider text-amber-400 flex items-center justify-between">
+                  <span>1. Set Stock Batch Preset Specifications</span>
+                  <span className="text-[10px] text-slate-400 font-mono">Applies automatically to all scanned IMEIs</span>
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 mb-1">Model</label>
+                    <select
+                      value={rapidPreset.model}
+                      onChange={e => setRapidPreset(p => ({ ...p, model: e.target.value }))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-2 text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    >
+                      {MODELS.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 mb-1">Storage</label>
+                    <select
+                      value={rapidPreset.storage}
+                      onChange={e => setRapidPreset(p => ({ ...p, storage: e.target.value }))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-2 text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    >
+                      {STORAGES.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 mb-1">Color</label>
+                    <select
+                      value={rapidPreset.color}
+                      onChange={e => setRapidPreset(p => ({ ...p, color: e.target.value }))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-2 text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    >
+                      {COLORS.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 mb-1">Cost (AED)</label>
+                    <input
+                      type="number"
+                      value={rapidPreset.costAed}
+                      onChange={e => setRapidPreset(p => ({ ...p, costAed: e.target.value }))}
+                      placeholder="1400"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-2 text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 mb-1">Faults / Notes</label>
+                    <input
+                      type="text"
+                      value={rapidPreset.faults}
+                      onChange={e => setRapidPreset(p => ({ ...p, faults: e.target.value }))}
+                      placeholder="HOUSING, LCD..."
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-2 text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <form onSubmit={handleRapidScanSubmit} className="space-y-3">
+                <p className="text-[11px] font-black uppercase tracking-wider text-emerald-400">
+                  2. Point Barcode Scanner &amp; Scan IMEI
+                </p>
+
+                {rapidErr && (
+                  <div className="bg-red-500/20 border border-red-500/50 p-3 rounded-xl text-xs text-red-300 font-bold flex items-center justify-between">
+                    <span>{rapidErr}</span>
+                    <button type="button" onClick={() => setRapidErr('')} className="text-red-400 hover:text-white">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+
+                <div className="relative flex items-center">
+                  <Barcode className="w-6 h-6 text-amber-400 absolute left-4" />
+                  <input
+                    ref={rapidInputRef}
+                    type="text"
+                    required
+                    value={rapidImeiInput}
+                    onChange={e => setRapidImeiInput(e.target.value)}
+                    placeholder="Scan 15-digit IMEI barcode here (Physical Barcode Reader auto-submits)..."
+                    className="w-full bg-slate-950 border-2 border-amber-500 focus:border-amber-400 rounded-2xl pl-12 pr-32 py-4 text-base font-mono font-black text-white placeholder-slate-500 focus:outline-none focus:ring-4 focus:ring-amber-500/30 shadow-inner"
+                  />
+                  <button
+                    type="submit"
+                    disabled={rapidSubmitting}
+                    className="absolute right-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl transition shadow-md flex items-center gap-1.5"
+                  >
+                    {rapidSubmitting ? 'Saving...' : '⚡ Add Stock'}
+                  </button>
+                </div>
+              </form>
+
+              <div className="space-y-2 border-t border-slate-800 pt-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center gap-2">
+                    <span>Recently Scanned in this Session</span>
+                    <span className="bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-mono text-[10px] font-bold border border-emerald-500/30">
+                      {rapidSessionDevices.length} Scanned
+                    </span>
+                  </h3>
+                  {rapidSessionDevices.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setRapidSessionDevices([])}
+                      className="text-[10px] text-slate-500 hover:text-slate-300 underline font-mono"
+                    >
+                      Clear Session View
+                    </button>
+                  )}
+                </div>
+
+                {rapidSessionDevices.length === 0 ? (
+                  <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 text-center text-slate-500 text-xs font-mono">
+                    Ready for scanning. Point USB / Bluetooth barcode reader and scan first IMEI barcode.
+                  </div>
+                ) : (
+                  <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden max-h-52 overflow-y-auto">
+                    <table className="w-full text-xs text-left">
+                      <thead className="bg-slate-900 text-slate-400 font-mono font-bold text-[10px] border-b border-slate-800">
+                        <tr>
+                          <th className="px-3 py-2">#</th>
+                          <th className="px-3 py-2">IMEI</th>
+                          <th className="px-3 py-2">Model</th>
+                          <th className="px-3 py-2">GB</th>
+                          <th className="px-3 py-2">Color</th>
+                          <th className="px-3 py-2">Cost (AED)</th>
+                          <th className="px-3 py-2 text-right">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800 font-mono">
+                        {rapidSessionDevices.map((d, i) => (
+                          <tr key={d.id} className="hover:bg-slate-900/60">
+                            <td className="px-3 py-2 text-slate-500">{rapidSessionDevices.length - i}</td>
+                            <td className="px-3 py-2 font-bold text-amber-300">{d.imei}</td>
+                            <td className="px-3 py-2 font-sans font-bold text-white">{d.model}</td>
+                            <td className="px-3 py-2 text-slate-400">{d.storage}</td>
+                            <td className="px-3 py-2 text-slate-400">{d.color}</td>
+                            <td className="px-3 py-2 text-slate-300">AED {d.costAed}</td>
+                            <td className="px-3 py-2 text-right">
+                              <span className="bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded text-[10px] font-bold border border-emerald-500/30">
+                                📦 RAW STOCK
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-slate-950 px-6 py-4 border-t border-slate-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowRapidScanModal(false)}
+                className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl border border-slate-700"
+              >
+                Done Scanning &amp; Close Desk
+              </button>
+            </div>
           </div>
         </div>
       )}
