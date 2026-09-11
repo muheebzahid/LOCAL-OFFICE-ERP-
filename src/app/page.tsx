@@ -285,6 +285,7 @@ export default function InventoryDashboardPage() {
   const safeBatches = Array.isArray(batches) ? batches : []
   const safeSales = Array.isArray(sales) ? sales : []
   const safeCenters = Array.isArray(centers) ? centers : []
+  const safeClients = Array.isArray(clients) ? clients : []
 
   const rawStockDevices = safeDevices.filter(d => d && d.status === 'RAW_STOCK' && !d.initialQcReport)
   const rawQcDoneDevices = safeDevices.filter(d => d && (d.status === 'RAW_QC_DONE' || (d.initialQcReport && d.status !== 'AT_REPAIR' && d.status !== 'SOLD' && d.status !== 'IN_STOCK')))
@@ -824,7 +825,7 @@ export default function InventoryDashboardPage() {
             <div className="space-y-1">
               {[
                 { id: 'dashboard', label: 'Executive Dashboard', icon: LayoutDashboard, badge: null, color: 'text-blue-400' },
-                { id: 'inventory', label: 'All Stock Inventory', icon: Layers, badge: devices.length, color: 'text-indigo-400' },
+                { id: 'inventory', label: 'All Stock Inventory', icon: Layers, badge: safeDevices.length, color: 'text-indigo-400' },
               ].map(item => (
                 <button
                   key={item.id}
@@ -851,7 +852,7 @@ export default function InventoryDashboardPage() {
             {[
               { id: 'initialQc', label: '1. Raw Stock (Initial QC)', icon: Package, count: rawStockDevices.length, alert: rawStockDevices.length > 0, color: 'text-blue-400' },
               { id: 'rawQcDone', label: '2. Raw QC Done Stock', icon: CheckCircle2, count: rawQcDoneDevices.length, color: 'text-teal-400' },
-              { id: 'batches', label: '3. Repair Batches & Timers', icon: Clock, count: batches.length, color: 'text-amber-400' },
+              { id: 'batches', label: '3. Repair Batches & Timers', icon: Clock, count: safeBatches.length, color: 'text-amber-400' },
               { id: 'afterFixQc', label: '4. After-Fix QC Desk', icon: ShieldCheck, count: afterFixQcDevices.length, alert: afterFixQcDevices.length > 0, color: 'text-purple-400' },
               { id: 'readyToSell', label: '5. Ready to Sell Stock', icon: Check, count: readyToSellDevices.length, color: 'text-green-400' },
               { id: 'masterCheck', label: '6. Master Check Desk', icon: Lock, count: masterCheckPendingDevices.length, alert: masterCheckPendingDevices.length > 0, color: 'text-red-400' },
@@ -876,10 +877,10 @@ export default function InventoryDashboardPage() {
           <div className="p-4 space-y-1">
             <p className="text-[10px] font-black uppercase text-slate-500 tracking-wider mb-2">FINANCIAL &amp; ACCOUNTS</p>
             {[
-              { id: 'clients', label: 'Client Accounts & Billing', icon: Users, badge: clients.length, color: 'text-cyan-400' },
-              { id: 'sales', label: 'Sales & Invoices Ledger', icon: ShoppingCart, badge: sales.length, color: 'text-emerald-400' },
+              { id: 'clients', label: 'Client Accounts & Billing', icon: Users, badge: safeClients.length, color: 'text-cyan-400' },
+              { id: 'sales', label: 'Sales & Invoices Ledger', icon: ShoppingCart, badge: safeSales.length, color: 'text-emerald-400' },
               { id: 'accounts', label: 'Refurb Payables & Accounts', icon: DollarSign, badge: `AED ${totalPayablesAed.toFixed(0)}`, color: 'text-red-400' },
-              { id: 'centers', label: 'Refurb Centers Directory', icon: Building2, badge: centers.length, color: 'text-slate-400' },
+              { id: 'centers', label: 'Refurb Centers Directory', icon: Building2, badge: safeCenters.length, color: 'text-slate-400' },
             ].map(item => (
               <button
                 key={item.id}
@@ -907,9 +908,9 @@ export default function InventoryDashboardPage() {
           {/* TOP SUMMARY CARDS BAR (Always visible for fast executive overview) */}
           <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
             {[
-              { label: 'Total Inventory', value: devices.length, icon: Package, bg: 'bg-blue-50', color: 'text-blue-600', t: 'inventory' },
+              { label: 'Total Inventory', value: safeDevices.length, icon: Package, bg: 'bg-blue-50', color: 'text-blue-600', t: 'inventory' },
               { label: 'Raw Stock (Initial QC)', value: rawStockDevices.length, icon: Package, bg: 'bg-indigo-50', color: 'text-indigo-600', t: 'initialQc' },
-              { label: 'Active Repair Batches', value: batches.length, icon: Clock, bg: 'bg-amber-50', color: 'text-amber-600', t: 'batches' },
+              { label: 'Active Repair Batches', value: safeBatches.length, icon: Clock, bg: 'bg-amber-50', color: 'text-amber-600', t: 'batches' },
               { label: 'After-Fix QC Desk', value: afterFixQcDevices.length, icon: ShieldCheck, bg: 'bg-purple-50', color: 'text-purple-600', t: 'afterFixQc' },
               { label: 'Ready to Sell Stock', value: readyToSellDevices.length, icon: Check, bg: 'bg-green-50', color: 'text-green-600', t: 'readyToSell' },
               { label: 'Payables Ledger', value: `AED ${totalPayablesAed.toFixed(0)}`, icon: DollarSign, bg: 'bg-red-50', color: 'text-red-700', t: 'accounts' }
