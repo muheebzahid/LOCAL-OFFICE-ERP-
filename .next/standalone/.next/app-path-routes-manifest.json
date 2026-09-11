@@ -1,0 +1,22 @@
+{
+  "/api/after-fix-qc/route": "/api/after-fix-qc",
+  "/api/auth/login/route": "/api/auth/login",
+  "/api/batches/[id]/route": "/api/batches/[id]",
+  "/api/clients/route": "/api/clients",
+  "/api/batches/route": "/api/batches",
+  "/api/clients/[id]/route": "/api/clients/[id]",
+  "/api/devices/route": "/api/devices",
+  "/api/devices/[id]/route": "/api/devices/[id]",
+  "/api/devices/import/route": "/api/devices/import",
+  "/api/initial-qc/route": "/api/initial-qc",
+  "/api/master-check/route": "/api/master-check",
+  "/api/qc/route": "/api/qc",
+  "/api/refurb-centers/[id]/route": "/api/refurb-centers/[id]",
+  "/api/refurb-centers/route": "/api/refurb-centers",
+  "/api/refurb-centers/payments/route": "/api/refurb-centers/payments",
+  "/api/sales/[id]/route": "/api/sales/[id]",
+  "/api/sales/route": "/api/sales",
+  "/_not-found/page": "/_not-found",
+  "/refurb/page": "/refurb",
+  "/page": "/"
+}
