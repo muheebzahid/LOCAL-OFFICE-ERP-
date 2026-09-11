@@ -1730,6 +1730,26 @@ export default function InventoryDashboardPage() {
                       <span className="text-xs text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full font-bold">{batch.devices.length} Devices</span>
 
                       <div className="ml-auto flex items-center gap-2 flex-wrap">
+                        <button
+                          onClick={() => {
+                            setScanFaultForm({
+                              imei: '',
+                              model: '15 PRO',
+                              storage: '128GB',
+                              color: 'BLACK',
+                              costAed: '1400',
+                              faults: [],
+                              notes: '',
+                              destination: 'REPAIR_BATCH',
+                              targetBatchId: batch.id
+                            })
+                            setShowScanFaultModal(true)
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-black shadow-sm transition"
+                          title="Scan 15-digit IMEI barcode and write detailed faults for this batch"
+                        >
+                          <Barcode className="w-3.5 h-3.5" /> ⚡ Scan Units to Batch
+                        </button>
                         <button onClick={() => setHandoverModal(batch)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-xs font-bold text-amber-800 hover:bg-amber-100 shadow-sm">
                           <Printer className="w-3.5 h-3.5 text-amber-600" /> Handover Voucher
                         </button>
@@ -4577,9 +4597,19 @@ export default function InventoryDashboardPage() {
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center px-4 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6 space-y-4 my-6">
             <div className="flex justify-between items-center border-b border-gray-200 pb-3">
-              <h3 className="font-extrabold text-gray-900 text-base flex items-center gap-2">
-                <Barcode className="w-5 h-5 text-amber-600" /> ⚡ Scan IMEI &amp; Manually Log Faults
-              </h3>
+              <div className="flex items-center gap-3 flex-wrap">
+                <h3 className="font-extrabold text-gray-900 text-base flex items-center gap-2">
+                  <Barcode className="w-5 h-5 text-amber-600" /> ⚡ Scan IMEI &amp; Manually Log Faults
+                </h3>
+                {(() => {
+                  const targetBatchObj = safeBatches.find(b => b.id === scanFaultForm.targetBatchId)
+                  return targetBatchObj ? (
+                    <span className="text-xs font-black text-amber-900 bg-amber-200 px-3 py-1 rounded-full border border-amber-400 animate-pulse">
+                      🎯 BATCH: {targetBatchObj.batchNumber} ({targetBatchObj.refurbCenterName})
+                    </span>
+                  ) : null
+                })()}
+              </div>
               <button onClick={() => setShowScanFaultModal(false)}><X className="w-5 h-5 text-gray-400" /></button>
             </div>
 
@@ -4589,7 +4619,23 @@ export default function InventoryDashboardPage() {
                 <input
                   type="text"
                   value={scanFaultForm.imei}
-                  onChange={e => setScanFaultForm(f => ({ ...f, imei: e.target.value }))}
+                  onChange={e => {
+                    const val = e.target.value
+                    const foundDev = safeDevices.find(d => d && safeLower(d.imei) === safeLower(val.trim()))
+                    if (foundDev) {
+                      setScanFaultForm(f => ({
+                        ...f,
+                        imei: val,
+                        model: foundDev.model || f.model,
+                        storage: foundDev.storage || f.storage,
+                        color: foundDev.color || f.color,
+                        costAed: String(foundDev.costAed || f.costAed),
+                        notes: foundDev.faults || f.notes
+                      }))
+                    } else {
+                      setScanFaultForm(f => ({ ...f, imei: val }))
+                    }
+                  }}
                   placeholder="Point scanner or type 15-digit IMEI..."
                   className="w-full bg-white border border-amber-300 rounded-lg px-3 py-2 text-sm font-mono font-bold focus:outline-none focus:ring-2 focus:ring-amber-500"
                   autoFocus
@@ -4726,11 +4772,12 @@ export default function InventoryDashboardPage() {
                     return
                   }
 
+                  const currentTargetBatchId = scanFaultForm.targetBatchId
                   if (scanFaultForm.destination === 'READY_TO_SELL') {
                     await moveToReadyToSell(newDev)
                   } else if (scanFaultForm.destination === 'REPAIR_BATCH') {
-                    if (scanFaultForm.targetBatchId) {
-                      await addStockToExistingBatch(scanFaultForm.targetBatchId, [newDev.id])
+                    if (currentTargetBatchId) {
+                      await addStockToExistingBatch(currentTargetBatchId, [newDev.id])
                     } else {
                       setSelectedBatchDeviceIds([newDev.id])
                       setBatchModalMode('CREATE_NEW')
@@ -4742,18 +4789,29 @@ export default function InventoryDashboardPage() {
                     showToast(`📋 ${newDev.model} (${newDev.imei}) saved to Raw QC Stock with logged faults!`)
                   }
                   await loadData()
-                  setShowScanFaultModal(false)
-                  setScanFaultForm({
-                    imei: '',
-                    model: '15 PRO',
-                    storage: '128GB',
-                    color: 'BLACK',
-                    costAed: '1400',
-                    faults: [],
-                    notes: '',
-                    destination: 'REPAIR_BATCH',
-                    targetBatchId: ''
-                  })
+                  if (currentTargetBatchId) {
+                    showToast(`⚡ ${newDev.model} (${newDev.imei}) added to batch! Ready for next scan...`)
+                    setScanFaultForm(f => ({
+                      ...f,
+                      imei: '',
+                      faults: [],
+                      notes: '',
+                      targetBatchId: currentTargetBatchId
+                    }))
+                  } else {
+                    setShowScanFaultModal(false)
+                    setScanFaultForm({
+                      imei: '',
+                      model: '15 PRO',
+                      storage: '128GB',
+                      color: 'BLACK',
+                      costAed: '1400',
+                      faults: [],
+                      notes: '',
+                      destination: 'REPAIR_BATCH',
+                      targetBatchId: ''
+                    })
+                  }
                 }}
                 className="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs rounded-xl shadow-md"
               >

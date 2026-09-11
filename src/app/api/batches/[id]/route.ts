@@ -49,6 +49,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (!dev) continue
       if (upd.repairCostAed !== undefined) dev.repairCostAed = Number(upd.repairCostAed) || 0
       if (upd.repairNotes !== undefined) dev.repairNotes = upd.repairNotes
+      if (upd.faults !== undefined) {
+        dev.faults = upd.faults
+        const dIdx = db.devices.findIndex(d => d.id === upd.deviceId)
+        if (dIdx !== -1) db.devices[dIdx].faults = upd.faults
+      }
     }
   }
 
