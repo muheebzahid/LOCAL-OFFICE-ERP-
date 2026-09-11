@@ -213,6 +213,15 @@ export default function InventoryDashboardPage() {
   const [centerForm, setCenterForm] = useState({ name: '', contact: '', address: '', notes: '' })
   const [savingCenter, setSavingCenter] = useState(false)
 
+  // Edit Center & Client State
+  const [editCenterModal, setEditCenterModal] = useState<RefurbCenter | null>(null)
+  const [editCenterForm, setEditCenterForm] = useState({ name: '', contact: '', address: '', notes: '' })
+  const [savingEditCenter, setSavingEditCenter] = useState(false)
+
+  const [editClientModal, setEditClientModal] = useState<Client | null>(null)
+  const [editClientForm, setEditClientForm] = useState({ name: '', phone: '', address: '', notes: '' })
+  const [savingEditClient, setSavingEditClient] = useState(false)
+
   const [masterCheckModalDevice, setMasterCheckModalDevice] = useState<Device | null>(null)
   const [adminPasscode, setAdminPasscode] = useState('')
   const [masterCheckErr, setMasterCheckErr] = useState('')
@@ -223,6 +232,77 @@ export default function InventoryDashboardPage() {
   const [readyToSellSubTab, setReadyToSellSubTab] = useState<'available' | 'sold'>('available')
 
   function showToast(msg: string, ok = true) { setToast({ msg, ok }); setTimeout(() => setToast(null), 4500) }
+
+  function openEditCenterModal(c: RefurbCenter) {
+    setEditCenterModal(c)
+    setEditCenterForm({ name: c.name || '', contact: c.contact || '', address: c.address || '', notes: c.notes || '' })
+  }
+
+  async function saveEditCenter(e: React.FormEvent) {
+    e.preventDefault(); if (!editCenterModal) return; setSavingEditCenter(true)
+    const res = await fetch(`/api/refurb-centers/${editCenterModal.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(editCenterForm)
+    })
+    const data = await res.json()
+    setSavingEditCenter(false)
+    if (res.ok) {
+      if (Array.isArray(data.refurbCenters)) setCenters(data.refurbCenters)
+      setEditCenterModal(null)
+      showToast('🏢 Refurb Center updated successfully!')
+    } else {
+      showToast(data.error || 'Failed to update refurb center', false)
+    }
+  }
+
+  async function deleteRefurbCenter(id: string) {
+    if (!confirm('Are you sure you want to delete this Refurb Center?')) return
+    const res = await fetch(`/api/refurb-centers/${id}`, { method: 'DELETE' })
+    const data = await res.json()
+    if (res.ok) {
+      if (Array.isArray(data.refurbCenters)) setCenters(data.refurbCenters)
+      showToast('🗑️ Refurb Center deleted')
+    } else {
+      showToast(data.error || 'Failed to delete center', false)
+    }
+  }
+
+  function openEditClientModal(c: Client) {
+    setEditClientModal(c)
+    setEditClientForm({ name: c.name || '', phone: c.phone || '', address: c.address || '', notes: c.notes || '' })
+  }
+
+  async function saveEditClient(e: React.FormEvent) {
+    e.preventDefault(); if (!editClientModal) return; setSavingEditClient(true)
+    const res = await fetch(`/api/clients/${encodeURIComponent(editClientModal.name)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(editClientForm)
+    })
+    const data = await res.json()
+    setSavingEditClient(false)
+    if (res.ok) {
+      if (Array.isArray(data.clients)) setClients(data.clients)
+      if (Array.isArray(data.sales)) setSales(data.sales)
+      setEditClientModal(null)
+      showToast('👤 Client account updated successfully!')
+    } else {
+      showToast(data.error || 'Failed to update client account', false)
+    }
+  }
+
+  async function deleteClientAccount(name: string) {
+    if (!confirm(`Are you sure you want to delete client account "${name}"?`)) return
+    const res = await fetch(`/api/clients/${encodeURIComponent(name)}`, { method: 'DELETE' })
+    const data = await res.json()
+    if (res.ok) {
+      if (Array.isArray(data.clients)) setClients(data.clients)
+      showToast('🗑️ Client account deleted')
+    } else {
+      showToast(data.error || 'Failed to delete client account', false)
+    }
+  }
 
   async function loadData() {
     setLoading(true)
@@ -1721,9 +1801,19 @@ export default function InventoryDashboardPage() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {centers.map(c => (
-                  <div key={c.id} className="bg-white rounded-2xl p-5 border border-gray-200 shadow-xs space-y-2">
-                    <h3 className="font-black text-gray-900 text-base">{c.name}</h3>
+                {safeCenters.map(c => (
+                  <div key={c.id} className="bg-white rounded-2xl p-5 border border-gray-200 shadow-xs space-y-2 relative">
+                    <div className="flex justify-between items-start">
+                      <h3 className="font-black text-gray-900 text-base">{c.name}</h3>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => openEditCenterModal(c)} title="Edit Refurb Center" className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg">
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => deleteRefurbCenter(c.id)} title="Delete Refurb Center" className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
                     <p className="text-xs text-gray-600">📞 {c.contact || 'No Phone'}</p>
                     <p className="text-xs text-gray-500">📍 {c.address || 'Dubai, UAE'}</p>
                     {c.notes && <p className="text-xs text-amber-800 bg-amber-50 p-2 rounded-lg">{c.notes}</p>}
@@ -1867,7 +1957,7 @@ export default function InventoryDashboardPage() {
                         </div>
                       </div>
 
-                      <div className="flex gap-2 pt-2 border-t border-gray-100">
+                      <div className="flex gap-1.5 pt-2 border-t border-gray-100">
                         <button
                           onClick={() => {
                             setBillClientTarget(client)
@@ -1879,9 +1969,23 @@ export default function InventoryDashboardPage() {
                         </button>
                         <button
                           onClick={() => setViewClientStatement(client)}
-                          className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl border border-slate-300"
+                          className="py-2 px-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-xl border border-slate-300"
                         >
                           Invoices ({client.totalInvoicesCount || 0})
+                        </button>
+                        <button
+                          onClick={() => openEditClientModal(client)}
+                          title="Edit Client Account"
+                          className="p-2 text-slate-500 hover:text-cyan-700 hover:bg-cyan-50 rounded-xl border border-slate-200"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => deleteClientAccount(client.name)}
+                          title="Delete Client Account"
+                          className="p-2 text-slate-500 hover:text-red-700 hover:bg-red-50 rounded-xl border border-slate-200"
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
@@ -3792,6 +3896,74 @@ export default function InventoryDashboardPage() {
               <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
                 <button type="button" onClick={() => setShowImport(false)} className="px-4 py-2 border rounded-lg font-bold text-gray-600">Cancel</button>
                 <button type="submit" disabled={saving || !importText.trim()} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl shadow-md">{saving ? 'Importing...' : '📥 Process & Import Stock'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT REFURB CENTER MODAL */}
+      {editCenterModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div className="flex justify-between items-center border-b border-gray-200 pb-3">
+              <h3 className="font-extrabold text-gray-900 text-base">Edit Refurb Center — {editCenterModal.name}</h3>
+              <button onClick={() => setEditCenterModal(null)}><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            <form onSubmit={saveEditCenter} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-gray-600 mb-1">Center Name *</label>
+                <input required value={editCenterForm.name} onChange={e => setEditCenterForm(f => ({ ...f, name: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block font-semibold text-gray-600 mb-1">Contact Person / Phone</label>
+                <input value={editCenterForm.contact} onChange={e => setEditCenterForm(f => ({ ...f, contact: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block font-semibold text-gray-600 mb-1">Address / Location</label>
+                <input value={editCenterForm.address} onChange={e => setEditCenterForm(f => ({ ...f, address: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block font-semibold text-gray-600 mb-1">Notes / Terms</label>
+                <textarea value={editCenterForm.notes} onChange={e => setEditCenterForm(f => ({ ...f, notes: e.target.value }))} rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+              </div>
+              <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
+                <button type="button" onClick={() => setEditCenterModal(null)} className="px-4 py-2 rounded-lg border border-gray-300 font-semibold text-gray-600">Cancel</button>
+                <button type="submit" disabled={savingEditCenter} className="px-5 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold">{savingEditCenter ? 'Saving...' : 'Save Changes'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT CLIENT ACCOUNT MODAL */}
+      {editClientModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div className="flex justify-between items-center border-b border-gray-200 pb-3">
+              <h3 className="font-extrabold text-gray-900 text-base">Edit Client Account — {editClientModal.name}</h3>
+              <button onClick={() => setEditClientModal(null)}><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            <form onSubmit={saveEditClient} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-gray-600 mb-1">Client / Company Name *</label>
+                <input required value={editClientForm.name} onChange={e => setEditClientForm(f => ({ ...f, name: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block font-semibold text-gray-600 mb-1">Phone Number</label>
+                <input value={editClientForm.phone} onChange={e => setEditClientForm(f => ({ ...f, phone: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block font-semibold text-gray-600 mb-1">Address / Market Location</label>
+                <input value={editClientForm.address} onChange={e => setEditClientForm(f => ({ ...f, address: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block font-semibold text-gray-600 mb-1">Account Notes / Credit Limit Terms</label>
+                <textarea value={editClientForm.notes} onChange={e => setEditClientForm(f => ({ ...f, notes: e.target.value }))} rows={2} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+              </div>
+              <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
+                <button type="button" onClick={() => setEditClientModal(null)} className="px-4 py-2 rounded-lg border border-gray-300 font-semibold text-gray-600">Cancel</button>
+                <button type="submit" disabled={savingEditClient} className="px-5 py-2 rounded-lg bg-cyan-700 hover:bg-cyan-800 text-white font-bold">{savingEditClient ? 'Saving...' : 'Save Account Changes'}</button>
               </div>
             </form>
           </div>
