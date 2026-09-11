@@ -213,6 +213,36 @@ export default function InventoryDashboardPage() {
   const [viewDevicePassport, setViewDevicePassport] = useState<Device | null>(null)
   const [readyToSellSubTab, setReadyToSellSubTab] = useState<'available' | 'sold'>('available')
 
+  // Dedicated Edit Logged Faults state
+  const [editFaultsDevice, setEditFaultsDevice] = useState<Device | null>(null)
+  const [editFaultsText, setEditFaultsText] = useState('')
+  const [savingFaults, setSavingFaults] = useState(false)
+
+  function openEditFaultsModal(device: Device) {
+    setEditFaultsDevice(device)
+    setEditFaultsText(device.faults || '')
+  }
+
+  async function handleSaveEditFaults(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editFaultsDevice) return
+    setSavingFaults(true)
+    const res = await fetch(`/api/devices/${editFaultsDevice.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ faults: editFaultsText })
+    })
+    const updated = await res.json()
+    setSavingFaults(false)
+    if (res.ok) {
+      setDevices(prev => prev.map(d => d.id === editFaultsDevice.id ? updated : d))
+      setEditFaultsDevice(null)
+      showToast(`✏️ Logged Faults updated for ${editFaultsDevice.model} (${editFaultsDevice.imei})!`)
+    } else {
+      showToast(updated.error || 'Failed to update logged faults', false)
+    }
+  }
+
   function showToast(msg: string, ok = true) { setToast({ msg, ok }); setTimeout(() => setToast(null), 4500) }
 
   async function loadData() {
@@ -1126,7 +1156,19 @@ export default function InventoryDashboardPage() {
                           <td className="px-4 py-3 font-bold text-gray-900">{d.model} {d.storage}</td>
                           <td className="px-4 py-3">{d.color}</td>
                           <td className="px-4 py-3 font-mono text-gray-700 font-bold">{d.imei}</td>
-                          <td className="px-4 py-3 font-semibold text-orange-800">{d.faults || 'General Inspection Complete'}</td>
+                          <td className="px-4 py-3 font-semibold text-orange-800">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-semibold text-orange-800 flex-1">{d.faults || 'General Inspection Complete'}</span>
+                              <button
+                                type="button"
+                                onClick={() => openEditFaultsModal(d)}
+                                className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 font-extrabold text-[11px] rounded-lg shadow-xs inline-flex items-center gap-1 shrink-0 transition cursor-pointer"
+                                title="Edit Logged Faults & QC Findings"
+                              >
+                                <Pencil className="w-3.5 h-3.5 text-amber-700" /> Edit Faults
+                              </button>
+                            </div>
+                          </td>
                           <td className="px-4 py-3 text-center">
                             <div className="flex items-center justify-center gap-2 flex-wrap">
                               <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-teal-100 text-teal-800 border border-teal-300">
@@ -3774,6 +3816,93 @@ export default function InventoryDashboardPage() {
               <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
                 <button type="button" onClick={() => setShowImport(false)} className="px-4 py-2 border rounded-lg font-bold text-gray-600">Cancel</button>
                 <button type="submit" disabled={saving || !importText.trim()} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl shadow-md">{saving ? 'Importing...' : '📥 Process & Import Stock'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* EDIT LOGGED FAULTS MODAL */}
+      {editFaultsDevice && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center px-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4 my-8">
+            <div className="flex justify-between items-center border-b border-gray-200 pb-3">
+              <div>
+                <h3 className="font-black text-base text-gray-900 flex items-center gap-2">
+                  <Pencil className="w-5 h-5 text-amber-600" /> Edit Logged Faults / Initial QC Findings
+                </h3>
+                <p className="text-xs text-gray-500 font-mono mt-0.5">
+                  {editFaultsDevice.model} {editFaultsDevice.storage} ({editFaultsDevice.color}) — IMEI: <strong>{editFaultsDevice.imei}</strong>
+                </p>
+              </div>
+              <button onClick={() => setEditFaultsDevice(null)} className="p-1 text-gray-400 hover:text-gray-600 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditFaults} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-gray-700 mb-1.5 uppercase tracking-wider text-[11px]">
+                  Quick Fault Presets (Click to add/remove):
+                </label>
+                <div className="flex flex-wrap gap-1.5 bg-gray-50 p-3 rounded-xl border border-gray-200 max-h-36 overflow-y-auto">
+                  {['HOUSING', 'BACK GLASS', 'DISPLAY MSG', 'BATTERY MSG', 'BATTERY', 'LCD', 'NFC', 'FACE ID', 'FRONT CAMERA', 'BACK CAMERA', 'FLEX', 'SENSOR', 'BOARD', 'FLASHLIGHT', 'FRONT SPEAKER', 'SIM LOCKED', 'LCD DEMAGE', 'CAMERA SHAKING', 'TOUCH ISSUES', 'WATER DAMAGE'].map(preset => {
+                    const isSelected = editFaultsText.toUpperCase().includes(preset)
+                    return (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => {
+                          let currentArr = editFaultsText.split(',').map(s => s.trim()).filter(Boolean)
+                          const upperArr = currentArr.map(s => s.toUpperCase())
+                          if (upperArr.includes(preset)) {
+                            currentArr = currentArr.filter(s => s.toUpperCase() !== preset)
+                          } else {
+                            currentArr.push(preset)
+                          }
+                          setEditFaultsText(currentArr.join(', '))
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold border transition cursor-pointer ${
+                          isSelected
+                            ? 'bg-amber-600 text-white border-amber-700 shadow-xs'
+                            : 'bg-white text-gray-700 border-gray-300 hover:border-amber-400 hover:bg-amber-50'
+                        }`}
+                      >
+                        {isSelected ? '✓ ' : '+ '}{preset}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1 uppercase tracking-wider text-[11px]">
+                  Logged Faults / Initial QC Findings (Editable Text):
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={editFaultsText}
+                  onChange={e => setEditFaultsText(e.target.value)}
+                  className="w-full bg-amber-50/40 border border-amber-300 rounded-xl p-3 text-xs font-bold font-mono text-amber-950 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-inner"
+                  placeholder="e.g. *FLASHLIGHT, HOUSING, BACK GLASS, DISPLAY MSG, FRONT CAMERA, BACK CAMERA"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setEditFaultsDevice(null)}
+                  className="px-4 py-2 border border-gray-300 rounded-xl font-bold text-gray-600 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingFaults}
+                  className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-extrabold rounded-xl shadow-md transition flex items-center gap-1.5"
+                >
+                  {savingFaults ? 'Saving...' : '✓ Save Updated Faults'}
+                </button>
               </div>
             </form>
           </div>
