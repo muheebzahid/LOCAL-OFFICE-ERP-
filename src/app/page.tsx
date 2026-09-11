@@ -213,36 +213,6 @@ export default function InventoryDashboardPage() {
   const [viewDevicePassport, setViewDevicePassport] = useState<Device | null>(null)
   const [readyToSellSubTab, setReadyToSellSubTab] = useState<'available' | 'sold'>('available')
 
-  // Dedicated Edit Logged Faults state
-  const [editFaultsDevice, setEditFaultsDevice] = useState<Device | null>(null)
-  const [editFaultsText, setEditFaultsText] = useState('')
-  const [savingFaults, setSavingFaults] = useState(false)
-
-  function openEditFaultsModal(device: Device) {
-    setEditFaultsDevice(device)
-    setEditFaultsText(device.faults || '')
-  }
-
-  async function handleSaveEditFaults(e: React.FormEvent) {
-    e.preventDefault()
-    if (!editFaultsDevice) return
-    setSavingFaults(true)
-    const res = await fetch(`/api/devices/${editFaultsDevice.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ faults: editFaultsText })
-    })
-    const updated = await res.json()
-    setSavingFaults(false)
-    if (res.ok) {
-      setDevices(prev => prev.map(d => d.id === editFaultsDevice.id ? updated : d))
-      setEditFaultsDevice(null)
-      showToast(`✏️ Logged Faults updated for ${editFaultsDevice.model} (${editFaultsDevice.imei})!`)
-    } else {
-      showToast(updated.error || 'Failed to update logged faults', false)
-    }
-  }
-
   function showToast(msg: string, ok = true) { setToast({ msg, ok }); setTimeout(() => setToast(null), 4500) }
 
   async function loadData() {
@@ -281,33 +251,26 @@ export default function InventoryDashboardPage() {
   useEffect(() => { loadData() }, [])
 
   // Collections
-  const safeDevices = Array.isArray(devices) ? devices : []
-  const safeBatches = Array.isArray(batches) ? batches : []
-  const safeSales = Array.isArray(sales) ? sales : []
-  const safeCenters = Array.isArray(centers) ? centers : []
-  const safeClients = Array.isArray(clients) ? clients : []
-
-  const rawStockDevices = safeDevices.filter(d => d && d.status === 'RAW_STOCK' && !d.initialQcReport)
-  const rawQcDoneDevices = safeDevices.filter(d => d && (d.status === 'RAW_QC_DONE' || (d.initialQcReport && d.status !== 'AT_REPAIR' && d.status !== 'SOLD' && d.status !== 'IN_STOCK')))
-  const selectableBatchDevices = safeDevices.filter(d => d && (d.status === 'RAW_QC_DONE' || d.status === 'QC_FAILED_RETRY' || d.status === 'MASTER_CHECK_APPROVED'))
-  const atRepairDevices = safeDevices.filter(d => d && d.status === 'AT_REPAIR')
-  const afterFixQcDevices = safeDevices.filter(d => d && (d.status === 'AFTER_FIX_QC' || d.status === 'IN_QC'))
-  const readyToSellDevices = safeDevices.filter(d => d && d.status === 'IN_STOCK')
-  const soldDevices = safeDevices.filter(d => d && d.status === 'SOLD')
-  const masterCheckPendingDevices = safeDevices.filter(d => d && d.status === 'MASTER_CHECK_PENDING')
+  const rawStockDevices = devices.filter(d => d.status === 'RAW_STOCK' && !d.initialQcReport)
+  const rawQcDoneDevices = devices.filter(d => d.status === 'RAW_QC_DONE' || (d.initialQcReport && d.status !== 'AT_REPAIR' && d.status !== 'SOLD' && d.status !== 'IN_STOCK'))
+  const selectableBatchDevices = devices.filter(d => d.status === 'RAW_QC_DONE' || d.status === 'QC_FAILED_RETRY' || d.status === 'MASTER_CHECK_APPROVED')
+  const atRepairDevices = devices.filter(d => d.status === 'AT_REPAIR')
+  const afterFixQcDevices = devices.filter(d => d.status === 'AFTER_FIX_QC' || d.status === 'IN_QC')
+  const readyToSellDevices = devices.filter(d => d.status === 'IN_STOCK')
+  const soldDevices = devices.filter(d => d.status === 'SOLD')
+  const masterCheckPendingDevices = devices.filter(d => d.status === 'MASTER_CHECK_PENDING')
 
   function getBatchInfoForDevice(deviceId: string, imei: string) {
-    const b = safeBatches.find(batch => batch && Array.isArray(batch.devices) && batch.devices.some(d => d && (d.deviceId === deviceId || d.imei === imei)))
-    if (b) return { batchNumber: b.batchNumber || '—', centerName: b.refurbCenterName || '—' }
+    const b = batches.find(batch => batch.devices.some(d => d.deviceId === deviceId || d.imei === imei))
+    if (b) return { batchNumber: b.batchNumber, centerName: b.refurbCenterName }
     return { batchNumber: '—', centerName: '—' }
   }
 
   // Universal IMEI Locator
   function locateUnitByImei(queryStr: string) {
-    if (!queryStr || typeof queryStr !== 'string') return
     const q = queryStr.trim().toLowerCase()
     if (!q) return
-    const target = safeDevices.find(d => d && d.imei && (d.imei.toLowerCase() === q || d.imei.toLowerCase().endsWith(q)))
+    const target = devices.find(d => d.imei.toLowerCase() === q || d.imei.toLowerCase().endsWith(q))
     if (!target) {
       showToast(`❌ No device found matching IMEI '${queryStr}' in system`, false)
       return
@@ -741,15 +704,10 @@ export default function InventoryDashboardPage() {
   }
 
   // Inventory Table Filter & Sort
-  const filtered = safeDevices.filter(d => {
-    if (!d) return false
+  const filtered = devices.filter(d => {
     if (filterStatus !== 'ALL' && d.status !== filterStatus) return false
-    const q = (search || '').toLowerCase()
-    return !q ||
-      (d.imei || '').toLowerCase().includes(q) ||
-      (d.model || '').toLowerCase().includes(q) ||
-      (d.color || '').toLowerCase().includes(q) ||
-      (d.faults || '').toLowerCase().includes(q)
+    const q = search.toLowerCase()
+    return !q || d.imei.includes(q) || d.model.toLowerCase().includes(q) || d.color.toLowerCase().includes(q) || d.faults.toLowerCase().includes(q)
   })
   const displayDevices = sortCol ? [...filtered].sort((a, b) => {
     const av = String((a as unknown as Record<string, unknown>)[sortCol] ?? '')
@@ -758,8 +716,8 @@ export default function InventoryDashboardPage() {
     return sortDir === 'asc' ? c : -c
   }) : filtered
 
-  const totalPayablesAed = safeCenters.reduce((sum, c) => sum + (c?.unpaidBalanceAed || 0), 0)
-  const totalSalesAed = safeSales.reduce((sum, s) => sum + (s?.sellingPriceAed || 0), 0)
+  const totalPayablesAed = centers.reduce((sum, c) => sum + (c.unpaidBalanceAed || 0), 0)
+  const totalSalesAed = sales.reduce((sum, s) => sum + (s.sellingPriceAed || 0), 0)
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col font-sans text-gray-900">
@@ -825,7 +783,7 @@ export default function InventoryDashboardPage() {
             <div className="space-y-1">
               {[
                 { id: 'dashboard', label: 'Executive Dashboard', icon: LayoutDashboard, badge: null, color: 'text-blue-400' },
-                { id: 'inventory', label: 'All Stock Inventory', icon: Layers, badge: safeDevices.length, color: 'text-indigo-400' },
+                { id: 'inventory', label: 'All Stock Inventory', icon: Layers, badge: devices.length, color: 'text-indigo-400' },
               ].map(item => (
                 <button
                   key={item.id}
@@ -852,7 +810,7 @@ export default function InventoryDashboardPage() {
             {[
               { id: 'initialQc', label: '1. Raw Stock (Initial QC)', icon: Package, count: rawStockDevices.length, alert: rawStockDevices.length > 0, color: 'text-blue-400' },
               { id: 'rawQcDone', label: '2. Raw QC Done Stock', icon: CheckCircle2, count: rawQcDoneDevices.length, color: 'text-teal-400' },
-              { id: 'batches', label: '3. Repair Batches & Timers', icon: Clock, count: safeBatches.length, color: 'text-amber-400' },
+              { id: 'batches', label: '3. Repair Batches & Timers', icon: Clock, count: batches.length, color: 'text-amber-400' },
               { id: 'afterFixQc', label: '4. After-Fix QC Desk', icon: ShieldCheck, count: afterFixQcDevices.length, alert: afterFixQcDevices.length > 0, color: 'text-purple-400' },
               { id: 'readyToSell', label: '5. Ready to Sell Stock', icon: Check, count: readyToSellDevices.length, color: 'text-green-400' },
               { id: 'masterCheck', label: '6. Master Check Desk', icon: Lock, count: masterCheckPendingDevices.length, alert: masterCheckPendingDevices.length > 0, color: 'text-red-400' },
@@ -877,10 +835,10 @@ export default function InventoryDashboardPage() {
           <div className="p-4 space-y-1">
             <p className="text-[10px] font-black uppercase text-slate-500 tracking-wider mb-2">FINANCIAL &amp; ACCOUNTS</p>
             {[
-              { id: 'clients', label: 'Client Accounts & Billing', icon: Users, badge: safeClients.length, color: 'text-cyan-400' },
-              { id: 'sales', label: 'Sales & Invoices Ledger', icon: ShoppingCart, badge: safeSales.length, color: 'text-emerald-400' },
+              { id: 'clients', label: 'Client Accounts & Billing', icon: Users, badge: clients.length, color: 'text-cyan-400' },
+              { id: 'sales', label: 'Sales & Invoices Ledger', icon: ShoppingCart, badge: sales.length, color: 'text-emerald-400' },
               { id: 'accounts', label: 'Refurb Payables & Accounts', icon: DollarSign, badge: `AED ${totalPayablesAed.toFixed(0)}`, color: 'text-red-400' },
-              { id: 'centers', label: 'Refurb Centers Directory', icon: Building2, badge: safeCenters.length, color: 'text-slate-400' },
+              { id: 'centers', label: 'Refurb Centers Directory', icon: Building2, badge: centers.length, color: 'text-slate-400' },
             ].map(item => (
               <button
                 key={item.id}
@@ -908,9 +866,9 @@ export default function InventoryDashboardPage() {
           {/* TOP SUMMARY CARDS BAR (Always visible for fast executive overview) */}
           <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
             {[
-              { label: 'Total Inventory', value: safeDevices.length, icon: Package, bg: 'bg-blue-50', color: 'text-blue-600', t: 'inventory' },
+              { label: 'Total Inventory', value: devices.length, icon: Package, bg: 'bg-blue-50', color: 'text-blue-600', t: 'inventory' },
               { label: 'Raw Stock (Initial QC)', value: rawStockDevices.length, icon: Package, bg: 'bg-indigo-50', color: 'text-indigo-600', t: 'initialQc' },
-              { label: 'Active Repair Batches', value: safeBatches.length, icon: Clock, bg: 'bg-amber-50', color: 'text-amber-600', t: 'batches' },
+              { label: 'Active Repair Batches', value: batches.length, icon: Clock, bg: 'bg-amber-50', color: 'text-amber-600', t: 'batches' },
               { label: 'After-Fix QC Desk', value: afterFixQcDevices.length, icon: ShieldCheck, bg: 'bg-purple-50', color: 'text-purple-600', t: 'afterFixQc' },
               { label: 'Ready to Sell Stock', value: readyToSellDevices.length, icon: Check, bg: 'bg-green-50', color: 'text-green-600', t: 'readyToSell' },
               { label: 'Payables Ledger', value: `AED ${totalPayablesAed.toFixed(0)}`, icon: DollarSign, bg: 'bg-red-50', color: 'text-red-700', t: 'accounts' }
@@ -1168,19 +1126,7 @@ export default function InventoryDashboardPage() {
                           <td className="px-4 py-3 font-bold text-gray-900">{d.model} {d.storage}</td>
                           <td className="px-4 py-3">{d.color}</td>
                           <td className="px-4 py-3 font-mono text-gray-700 font-bold">{d.imei}</td>
-                          <td className="px-4 py-3 font-semibold text-orange-800">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="font-semibold text-orange-800 flex-1">{d.faults || 'General Inspection Complete'}</span>
-                              <button
-                                type="button"
-                                onClick={() => openEditFaultsModal(d)}
-                                className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 font-extrabold text-[11px] rounded-lg shadow-xs inline-flex items-center gap-1 shrink-0 transition cursor-pointer"
-                                title="Edit Logged Faults & QC Findings"
-                              >
-                                <Pencil className="w-3.5 h-3.5 text-amber-700" /> Edit Faults
-                              </button>
-                            </div>
-                          </td>
+                          <td className="px-4 py-3 font-semibold text-orange-800">{d.faults || 'General Inspection Complete'}</td>
                           <td className="px-4 py-3 text-center">
                             <div className="flex items-center justify-center gap-2 flex-wrap">
                               <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-teal-100 text-teal-800 border border-teal-300">
@@ -3828,93 +3774,6 @@ export default function InventoryDashboardPage() {
               <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
                 <button type="button" onClick={() => setShowImport(false)} className="px-4 py-2 border rounded-lg font-bold text-gray-600">Cancel</button>
                 <button type="submit" disabled={saving || !importText.trim()} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl shadow-md">{saving ? 'Importing...' : '📥 Process & Import Stock'}</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-      {/* EDIT LOGGED FAULTS MODAL */}
-      {editFaultsDevice && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center px-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4 my-8">
-            <div className="flex justify-between items-center border-b border-gray-200 pb-3">
-              <div>
-                <h3 className="font-black text-base text-gray-900 flex items-center gap-2">
-                  <Pencil className="w-5 h-5 text-amber-600" /> Edit Logged Faults / Initial QC Findings
-                </h3>
-                <p className="text-xs text-gray-500 font-mono mt-0.5">
-                  {editFaultsDevice.model} {editFaultsDevice.storage} ({editFaultsDevice.color}) — IMEI: <strong>{editFaultsDevice.imei}</strong>
-                </p>
-              </div>
-              <button onClick={() => setEditFaultsDevice(null)} className="p-1 text-gray-400 hover:text-gray-600 rounded-lg">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEditFaults} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-gray-700 mb-1.5 uppercase tracking-wider text-[11px]">
-                  Quick Fault Presets (Click to add/remove):
-                </label>
-                <div className="flex flex-wrap gap-1.5 bg-gray-50 p-3 rounded-xl border border-gray-200 max-h-36 overflow-y-auto">
-                  {['HOUSING', 'BACK GLASS', 'DISPLAY MSG', 'BATTERY MSG', 'BATTERY', 'LCD', 'NFC', 'FACE ID', 'FRONT CAMERA', 'BACK CAMERA', 'FLEX', 'SENSOR', 'BOARD', 'FLASHLIGHT', 'FRONT SPEAKER', 'SIM LOCKED', 'LCD DEMAGE', 'CAMERA SHAKING', 'TOUCH ISSUES', 'WATER DAMAGE'].map(preset => {
-                    const isSelected = (editFaultsText || '').toUpperCase().includes(preset)
-                    return (
-                      <button
-                        key={preset}
-                        type="button"
-                        onClick={() => {
-                          let currentArr = (editFaultsText || '').split(',').map(s => s.trim()).filter(Boolean)
-                          const upperArr = currentArr.map(s => s.toUpperCase())
-                          if (upperArr.includes(preset)) {
-                            currentArr = currentArr.filter(s => s.toUpperCase() !== preset)
-                          } else {
-                            currentArr.push(preset)
-                          }
-                          setEditFaultsText(currentArr.join(', '))
-                        }}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold border transition cursor-pointer ${
-                          isSelected
-                            ? 'bg-amber-600 text-white border-amber-700 shadow-xs'
-                            : 'bg-white text-gray-700 border-gray-300 hover:border-amber-400 hover:bg-amber-50'
-                        }`}
-                      >
-                        {isSelected ? '✓ ' : '+ '}{preset}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1 uppercase tracking-wider text-[11px]">
-                  Logged Faults / Initial QC Findings (Editable Text):
-                </label>
-                <textarea
-                  required
-                  rows={3}
-                  value={editFaultsText}
-                  onChange={e => setEditFaultsText(e.target.value)}
-                  className="w-full bg-amber-50/40 border border-amber-300 rounded-xl p-3 text-xs font-bold font-mono text-amber-950 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-inner"
-                  placeholder="e.g. *FLASHLIGHT, HOUSING, BACK GLASS, DISPLAY MSG, FRONT CAMERA, BACK CAMERA"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
-                <button
-                  type="button"
-                  onClick={() => setEditFaultsDevice(null)}
-                  className="px-4 py-2 border border-gray-300 rounded-xl font-bold text-gray-600 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingFaults}
-                  className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-extrabold rounded-xl shadow-md transition flex items-center gap-1.5"
-                >
-                  {savingFaults ? 'Saving...' : '✓ Save Updated Faults'}
-                </button>
               </div>
             </form>
           </div>
