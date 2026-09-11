@@ -174,7 +174,14 @@ const DB_PATH = path.join(process.cwd(), 'data', 'db.json')
 export function getDb(): Db {
   const raw = fs.readFileSync(DB_PATH, 'utf8')
   const data = JSON.parse(raw)
-  if (!data.refurbTransactions) data.refurbTransactions = []
+  if (!Array.isArray(data.devices)) data.devices = []
+  if (!Array.isArray(data.sales)) data.sales = []
+  if (!Array.isArray(data.clients)) data.clients = []
+  if (!Array.isArray(data.refurbCenters)) data.refurbCenters = []
+  if (!Array.isArray(data.batches)) data.batches = []
+  if (!Array.isArray(data.refurbTransactions)) data.refurbTransactions = []
+  if (typeof data.nextInvoiceNum !== 'number') data.nextInvoiceNum = 1
+  if (typeof data.nextBatchNum !== 'number') data.nextBatchNum = 1
   return data
 }
 

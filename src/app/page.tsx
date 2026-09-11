@@ -11,6 +11,15 @@ import Link from 'next/link'
 import type { Device, Sale, RefurbCenter, Batch, BatchDevice, RefurbTransaction, Client } from '@/lib/db'
 
 // Constants & Helpers
+function safeStr(val: unknown): string {
+  if (val === null || val === undefined) return ''
+  return String(val)
+}
+
+function safeLower(val: unknown): string {
+  return safeStr(val).trim().toLowerCase()
+}
+
 const EMPTY_DEVICE: Record<string, string> = {
   imei: '', model: '15 PRO', storage: '128GB', color: 'BLACK', faults: '',
   housing: '', backGlass: '', displayMsg: '', batteryMsg: '', battery: '',
@@ -232,12 +241,12 @@ export default function InventoryDashboardPage() {
     const tData = await tr.json()
     const clData = await clr.json()
 
-    setDevices(dData)
-    setSales(sData)
-    setCenters(cData)
-    setBatches(bData)
-    setTransactions(tData.transactions || [])
-    setClients(clData.clients || [])
+    setDevices(Array.isArray(dData) ? dData : [])
+    setSales(Array.isArray(sData) ? sData : [])
+    setCenters(Array.isArray(cData) ? cData : [])
+    setBatches(Array.isArray(bData) ? bData : [])
+    setTransactions(tData && Array.isArray(tData.transactions) ? tData.transactions : [])
+    setClients(clData && Array.isArray(clData.clients) ? clData.clients : (Array.isArray(clData) ? clData : []))
     setLoading(false)
 
     if (typeof window !== 'undefined') {
@@ -250,19 +259,25 @@ export default function InventoryDashboardPage() {
 
   useEffect(() => { loadData() }, [])
 
-  // Collections
-  const rawStockDevices = devices.filter(d => d.status === 'RAW_STOCK' && !d.initialQcReport)
-  const rawQcDoneDevices = devices.filter(d => d.status === 'RAW_QC_DONE' || (d.initialQcReport && d.status !== 'AT_REPAIR' && d.status !== 'SOLD' && d.status !== 'IN_STOCK'))
-  const selectableBatchDevices = devices.filter(d => d.status === 'RAW_QC_DONE' || d.status === 'QC_FAILED_RETRY' || d.status === 'MASTER_CHECK_APPROVED')
-  const atRepairDevices = devices.filter(d => d.status === 'AT_REPAIR')
-  const afterFixQcDevices = devices.filter(d => d.status === 'AFTER_FIX_QC' || d.status === 'IN_QC')
-  const readyToSellDevices = devices.filter(d => d.status === 'IN_STOCK')
-  const soldDevices = devices.filter(d => d.status === 'SOLD')
-  const masterCheckPendingDevices = devices.filter(d => d.status === 'MASTER_CHECK_PENDING')
+  // Safe collections
+  const safeDevices = Array.isArray(devices) ? devices : []
+  const safeSales = Array.isArray(sales) ? sales : []
+  const safeCenters = Array.isArray(centers) ? centers : []
+  const safeBatches = Array.isArray(batches) ? batches : []
+  const safeClients = Array.isArray(clients) ? clients : []
+
+  const rawStockDevices = safeDevices.filter(d => d && d.status === 'RAW_STOCK' && !d.initialQcReport)
+  const rawQcDoneDevices = safeDevices.filter(d => d && (d.status === 'RAW_QC_DONE' || (d.initialQcReport && d.status !== 'AT_REPAIR' && d.status !== 'SOLD' && d.status !== 'IN_STOCK')))
+  const selectableBatchDevices = safeDevices.filter(d => d && (d.status === 'RAW_QC_DONE' || d.status === 'QC_FAILED_RETRY' || d.status === 'MASTER_CHECK_APPROVED'))
+  const atRepairDevices = safeDevices.filter(d => d && d.status === 'AT_REPAIR')
+  const afterFixQcDevices = safeDevices.filter(d => d && (d.status === 'AFTER_FIX_QC' || d.status === 'IN_QC'))
+  const readyToSellDevices = safeDevices.filter(d => d && d.status === 'IN_STOCK')
+  const soldDevices = safeDevices.filter(d => d && d.status === 'SOLD')
+  const masterCheckPendingDevices = safeDevices.filter(d => d && d.status === 'MASTER_CHECK_PENDING')
 
   function getBatchInfoForDevice(deviceId: string, imei: string) {
-    const b = batches.find(batch => batch.devices.some(d => d.deviceId === deviceId || d.imei === imei))
-    if (b) return { batchNumber: b.batchNumber, centerName: b.refurbCenterName }
+    const b = safeBatches.find(batch => batch && Array.isArray(batch.devices) && batch.devices.some(d => d && (d.deviceId === deviceId || d.imei === imei)))
+    if (b) return { batchNumber: safeStr(b.batchNumber) || '—', centerName: safeStr(b.refurbCenterName) || '—' }
     return { batchNumber: '—', centerName: '—' }
   }
 
@@ -704,20 +719,21 @@ export default function InventoryDashboardPage() {
   }
 
   // Inventory Table Filter & Sort
-  const filtered = devices.filter(d => {
+  const filtered = safeDevices.filter(d => {
+    if (!d) return false
     if (filterStatus !== 'ALL' && d.status !== filterStatus) return false
-    const q = search.toLowerCase()
-    return !q || d.imei.includes(q) || d.model.toLowerCase().includes(q) || d.color.toLowerCase().includes(q) || d.faults.toLowerCase().includes(q)
+    const q = safeLower(search)
+    return !q || safeLower(d.imei).includes(q) || safeLower(d.model).includes(q) || safeLower(d.color).includes(q) || safeLower(d.faults).includes(q)
   })
   const displayDevices = sortCol ? [...filtered].sort((a, b) => {
-    const av = String((a as unknown as Record<string, unknown>)[sortCol] ?? '')
-    const bv = String((b as unknown as Record<string, unknown>)[sortCol] ?? '')
+    const av = safeStr((a as unknown as Record<string, unknown>)[sortCol])
+    const bv = safeStr((b as unknown as Record<string, unknown>)[sortCol])
     const c = av.localeCompare(bv, undefined, { numeric: true })
     return sortDir === 'asc' ? c : -c
   }) : filtered
 
-  const totalPayablesAed = centers.reduce((sum, c) => sum + (c.unpaidBalanceAed || 0), 0)
-  const totalSalesAed = sales.reduce((sum, s) => sum + (s.sellingPriceAed || 0), 0)
+  const totalPayablesAed = safeCenters.reduce((sum, c) => sum + (c ? (c.unpaidBalanceAed || 0) : 0), 0)
+  const totalSalesAed = safeSales.reduce((sum, s) => sum + (s ? (s.sellingPriceAed || 0) : 0), 0)
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col font-sans text-gray-900">
@@ -1766,8 +1782,8 @@ export default function InventoryDashboardPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {sales.map(s => {
-                      const dev = devices.find(d => d.id === s.deviceId)
+                    {safeSales.map(s => {
+                      const dev = safeDevices.find(d => d && d.id === s.deviceId)
                       return (
                         <tr key={s.id} className="border-b border-gray-100 hover:bg-blue-50/30">
                           <td className="px-4 py-3 font-mono font-bold text-blue-700">{s.invoiceNumber}</td>
@@ -1775,7 +1791,7 @@ export default function InventoryDashboardPage() {
                           <td className="px-4 py-3">{s.model}</td>
                           <td className="px-4 py-3 font-mono text-gray-700">{s.imei}</td>
                           <td className="px-4 py-3 font-semibold text-green-700">{s.paymentMethod}</td>
-                          <td className="px-4 py-3 text-right font-black text-gray-900">AED {s.sellingPriceAed.toFixed(2)}</td>
+                          <td className="px-4 py-3 text-right font-black text-gray-900">AED {(s.sellingPriceAed || 0).toFixed(2)}</td>
                           <td className="px-4 py-3 text-center">
                             <div className="flex items-center justify-center gap-1">
                               <button onClick={() => openInvoiceForSale(s)} title="View / Print Invoice" className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg">
@@ -3202,12 +3218,14 @@ export default function InventoryDashboardPage() {
             <div className="grid grid-cols-2 gap-3 text-xs bg-cyan-50 border border-cyan-200 p-3 rounded-xl">
               <div>
                 <span className="text-gray-500 font-medium">Total Invoices Issued:</span>
-                <strong className="block text-gray-900 font-bold text-sm">{sales.filter(s => s.customerName.trim().toLowerCase() === viewClientStatement.name.trim().toLowerCase()).length}</strong>
+                <strong className="block text-gray-900 font-bold text-sm">
+                  {safeSales.filter(s => s && safeLower(s.customerName) === safeLower(viewClientStatement?.name)).length}
+                </strong>
               </div>
               <div>
                 <span className="text-gray-500 font-medium">Total Billed Amount:</span>
                 <strong className="block text-cyan-900 font-mono font-black text-sm">
-                  AED {sales.filter(s => s.customerName.trim().toLowerCase() === viewClientStatement.name.trim().toLowerCase()).reduce((sum, s) => sum + (s.sellingPriceAed || 0), 0).toFixed(2)}
+                  AED {safeSales.filter(s => s && safeLower(s.customerName) === safeLower(viewClientStatement?.name)).reduce((sum, s) => sum + (s?.sellingPriceAed || 0), 0).toFixed(2)}
                 </strong>
               </div>
             </div>
@@ -3225,18 +3243,18 @@ export default function InventoryDashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sales.filter(s => s.customerName.trim().toLowerCase() === viewClientStatement.name.trim().toLowerCase()).length === 0 ? (
+                  {safeSales.filter(s => s && safeLower(s.customerName) === safeLower(viewClientStatement?.name)).length === 0 ? (
                     <tr><td colSpan={6} className="p-8 text-center text-gray-400 italic">No invoices issued for this client account yet.</td></tr>
                   ) : (
-                    sales.filter(s => s.customerName.trim().toLowerCase() === viewClientStatement.name.trim().toLowerCase()).map(s => {
-                      const dev = devices.find(d => d.id === s.deviceId)
+                    safeSales.filter(s => s && safeLower(s.customerName) === safeLower(viewClientStatement?.name)).map(s => {
+                      const dev = safeDevices.find(d => d && d.id === s.deviceId)
                       return (
                         <tr key={s.id} className="border-b hover:bg-cyan-50/20">
                           <td className="p-2.5 font-mono font-bold text-blue-700 cursor-pointer hover:underline" onClick={() => { setViewClientStatement(null); openEditInvoiceModal(s) }}>{s.invoiceNumber}</td>
                           <td className="p-2.5 font-mono">{s.imei}</td>
                           <td className="p-2.5 font-bold">{s.model}</td>
                           <td className="p-2.5 text-green-700 font-medium">{s.paymentMethod}</td>
-                          <td className="p-2.5 text-right font-black">AED {s.sellingPriceAed.toFixed(2)}</td>
+                          <td className="p-2.5 text-right font-black">AED {(s.sellingPriceAed || 0).toFixed(2)}</td>
                           <td className="p-2.5 text-center">
                             <div className="flex items-center justify-center gap-1">
                               <button
@@ -3393,10 +3411,10 @@ export default function InventoryDashboardPage() {
                       </td>
                       <td className="border border-slate-300 p-2.5 text-center font-bold">1</td>
                       <td className="border border-slate-300 p-2.5 text-right font-black font-mono text-emerald-900">
-                        AED {item.sellingPriceAed.toFixed(2)}
+                        AED {(Number(item?.sellingPriceAed) || 0).toFixed(2)}
                       </td>
                       <td className="border border-slate-300 p-2.5 text-right font-black font-mono text-slate-950">
-                        AED {item.sellingPriceAed.toFixed(2)}
+                        AED {(Number(item?.sellingPriceAed) || 0).toFixed(2)}
                       </td>
                     </tr>
                   ))}
@@ -3408,7 +3426,7 @@ export default function InventoryDashboardPage() {
                 <div className="w-72 space-y-1.5 text-xs bg-slate-50 border border-slate-300 p-4 rounded-xl">
                   <div className="flex justify-between text-gray-600">
                     <span>Subtotal Selling Price:</span>
-                    <span className="font-bold font-mono">AED {invoiceData.sale.sellingPriceAed.toFixed(2)}</span>
+                    <span className="font-bold font-mono">AED {(Number(invoiceData.sale.sellingPriceAed) || 0).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-gray-600">
                     <span>VAT (0% Wholesale Export):</span>
@@ -3416,7 +3434,7 @@ export default function InventoryDashboardPage() {
                   </div>
                   <div className="flex justify-between font-black text-slate-950 border-t border-slate-400 pt-2 text-sm">
                     <span>Total Amount Payable:</span>
-                    <span className="font-mono text-blue-700">AED {invoiceData.sale.sellingPriceAed.toFixed(2)}</span>
+                    <span className="font-mono text-blue-700">AED {(Number(invoiceData.sale.sellingPriceAed) || 0).toFixed(2)}</span>
                   </div>
                 </div>
               </div>
