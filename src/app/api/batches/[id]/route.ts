@@ -57,6 +57,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
   }
 
+  if (body.removeDeviceId && typeof body.removeDeviceId === 'string') {
+    const targetId = body.removeDeviceId
+    batch.devices = batch.devices.filter(bd => bd.deviceId !== targetId && bd.imei !== targetId)
+    const dIdx = db.devices.findIndex(d => d.id === targetId || d.imei === targetId)
+    if (dIdx !== -1) {
+      if (body.deleteCompletely) {
+        db.devices.splice(dIdx, 1)
+      } else {
+        db.devices[dIdx].status = 'RAW_QC_DONE'
+      }
+    }
+  }
+
   // Return devices back into QC section (IN_QC)
   if (body.returnDeviceIds && Array.isArray(body.returnDeviceIds)) {
     for (const did of body.returnDeviceIds) {

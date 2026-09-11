@@ -900,6 +900,24 @@ export default function InventoryDashboardPage() {
     reader.readAsText(file)
   }
 
+  async function removeDeviceFromBatch(batchId: string, deviceId: string, imei: string) {
+    if (!confirm(`Are you sure you want to remove unit (${imei}) from this batch?`)) return
+    const deleteCompletely = confirm(`Click OK to revert unit back to Raw QC stock, or Cancel to delete unit completely from system.`) === false
+    const res = await fetch(`/api/batches/${batchId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ removeDeviceId: deviceId, deleteCompletely })
+    })
+    const data = await res.json()
+    if (res.ok) {
+      setBatches(prev => prev.map(b => b.id === batchId ? data.batch : b))
+      setDevices(data.devices)
+      showToast(`🗑️ Unit ${imei} removed from batch!`)
+    } else {
+      showToast(data.error || 'Failed to remove device', false)
+    }
+  }
+
   async function addStockToExistingBatch(targetBatchId?: string, deviceIds?: string[]) {
     const bId = targetBatchId || existingBatchTargetId
     const dIds = deviceIds || selectedBatchDeviceIds
@@ -1808,6 +1826,14 @@ export default function InventoryDashboardPage() {
                                   📝 Note
                                 </button>
                               )}
+                              <button
+                                type="button"
+                                onClick={() => removeDeviceFromBatch(batch.id, d.deviceId, d.imei)}
+                                className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition"
+                                title="Remove / Delete this unit from batch"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
                             </div>
                           )
                         })}
