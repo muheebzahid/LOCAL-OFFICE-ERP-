@@ -112,6 +112,30 @@ export interface UserSession {
 
 export default function InventoryDashboardPage() {
   const [currentUser, setCurrentUser] = useState<UserSession | null>(null)
+  const [backingUp, setBackingUp] = useState(false)
+
+  async function triggerBackupAndDownload() {
+    setBackingUp(true)
+    try {
+      const res = await fetch('/api/backup', { method: 'POST' })
+      const stats = await res.json()
+      setBackingUp(false)
+      if (res.ok && stats.ok) {
+        showToast(`💾 Server Backup Saved! (${stats.devicesCount} devices, ${stats.salesCount} sales, ${stats.batchesCount} batches)`)
+        const link = document.createElement('a')
+        link.href = '/api/backup'
+        link.download = `AQUA_CELL_DB_Backup_${new Date().toISOString().slice(0, 10)}.json`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      } else {
+        showToast(stats.error || 'Failed to create backup', false)
+      }
+    } catch (_err) {
+      setBackingUp(false)
+      showToast('Failed to trigger backup', false)
+    }
+  }
   const [authInitialized, setAuthInitialized] = useState(false)
   const [loginForm, setLoginForm] = useState({ username: '', password: '' })
   const [loginErr, setLoginErr] = useState('')
@@ -1140,6 +1164,18 @@ export default function InventoryDashboardPage() {
                 <Plus className="w-4 h-4" /> Add Device
               </button>
             </>
+          )}
+
+          {(currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPERVISOR') && (
+            <button
+              onClick={triggerBackupAndDownload}
+              disabled={backingUp}
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md transition cursor-pointer"
+              title="Create instant server backup and download JSON snapshot to computer"
+            >
+              <Download className="w-4 h-4 text-emerald-200" />
+              {backingUp ? 'Saving...' : '💾 Backup DB Now'}
+            </button>
           )}
 
           {currentUser && (
