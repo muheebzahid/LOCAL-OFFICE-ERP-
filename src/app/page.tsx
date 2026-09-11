@@ -102,7 +102,21 @@ function LiveUnitTimer({ sentAt }: { sentAt: string }) {
   )
 }
 
+export interface UserSession {
+  username: string
+  name: string
+  role: 'ADMIN' | 'SUPERVISOR' | 'REFURB'
+  centerId?: string
+  batchNumber?: string
+}
+
 export default function InventoryDashboardPage() {
+  const [currentUser, setCurrentUser] = useState<UserSession | null>(null)
+  const [authInitialized, setAuthInitialized] = useState(false)
+  const [loginForm, setLoginForm] = useState({ username: '', password: '' })
+  const [loginErr, setLoginErr] = useState('')
+  const [authenticating, setAuthenticating] = useState(false)
+
   const [devices, setDevices] = useState<Device[]>([])
   const [sales, setSales] = useState<Sale[]>([])
   const [centers, setCenters] = useState<RefurbCenter[]>([])
@@ -337,7 +351,53 @@ export default function InventoryDashboardPage() {
     }
   }
 
-  useEffect(() => { loadData() }, [])
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('aquacell_user')
+        if (saved) {
+          const parsed = JSON.parse(saved)
+          if (parsed && parsed.role) {
+            setCurrentUser(parsed)
+            if (parsed.role === 'REFURB') setTab('batches')
+          }
+        }
+      } catch (_e) {}
+      setAuthInitialized(true)
+    }
+    loadData()
+  }, [])
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault(); setAuthenticating(true); setLoginErr('')
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(loginForm)
+      })
+      const data = await res.json()
+      setAuthenticating(false)
+      if (res.ok && data.user) {
+        setCurrentUser(data.user)
+        try { localStorage.setItem('aquacell_user', JSON.stringify(data.user)) } catch (_e) {}
+        if (data.user.role === 'REFURB') setTab('batches')
+        showToast(`🔑 Welcome, ${data.user.name}!`)
+      } else {
+        setLoginErr(data.error || 'Login failed')
+      }
+    } catch (_err) {
+      setAuthenticating(false)
+      setLoginErr('Network error. Please try again.')
+    }
+  }
+
+  function handleLogout() {
+    setCurrentUser(null)
+    try { localStorage.removeItem('aquacell_user') } catch (_e) {}
+    setLoginForm({ username: '', password: '' })
+    showToast('🔒 Logged out successfully')
+  }
 
   // Safe collections
   const safeDevices = Array.isArray(devices) ? devices : []
@@ -365,7 +425,20 @@ export default function InventoryDashboardPage() {
   function locateUnitByImei(queryStr: string) {
     const q = queryStr.trim().toLowerCase()
     if (!q) return
-    const target = devices.find(d => d.imei.toLowerCase() === q || d.imei.toLowerCase().endsWith(q))
+    let targetPool = devices
+    if (currentUser?.role === 'REFURB') {
+      const allowedDevIds = new Set(
+        safeBatches
+          .filter(b => b && (
+            (currentUser.centerId && b.refurbCenterId === currentUser.centerId) ||
+            (currentUser.batchNumber && safeLower(b.batchNumber) === safeLower(currentUser.batchNumber)) ||
+            (!currentUser.centerId && !currentUser.batchNumber)
+          ))
+          .flatMap(b => (b.devices || []).map(d => d.deviceId))
+      )
+      targetPool = devices.filter(d => allowedDevIds.has(d.id))
+    }
+    const target = targetPool.find(d => d && (d.imei.toLowerCase() === q || d.imei.toLowerCase().endsWith(q)))
     if (!target) {
       showToast(`❌ No device found matching IMEI '${queryStr}' in system`, false)
       return
@@ -815,6 +888,87 @@ export default function InventoryDashboardPage() {
   const totalPayablesAed = safeCenters.reduce((sum, c) => sum + (c ? (c.unpaidBalanceAed || 0) : 0), 0)
   const totalSalesAed = safeSales.reduce((sum, s) => sum + (s ? (s.sellingPriceAed || 0) : 0), 0)
 
+  if (authInitialized && !currentUser) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 font-sans">
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 max-w-md w-full shadow-2xl space-y-6 text-white">
+          <div className="text-center space-y-2">
+            <div className="inline-flex bg-blue-600 p-3.5 rounded-2xl text-white font-black text-2xl mb-1 shadow-lg">AQ</div>
+            <h1 className="text-2xl font-black tracking-tight text-white">AQUA CELL ERP</h1>
+            <p className="text-xs text-slate-400 font-medium">Enterprise Stock, Sales &amp; Refurbishment Gateway</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            {loginErr && (
+              <div className="bg-red-500/10 border border-red-500/30 p-3 rounded-xl text-xs text-red-400 text-center font-bold">
+                {loginErr}
+              </div>
+            )}
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Username / Batch # / Refurb Center *</label>
+              <input
+                type="text"
+                required
+                value={loginForm.username}
+                onChange={e => setLoginForm(f => ({ ...f, username: e.target.value }))}
+                placeholder="e.g. admin, supervisor, refurb, BATCH-2026-0001"
+                className="w-full bg-slate-950 border border-slate-800 focus:border-blue-500 rounded-xl px-4 py-2.5 text-sm font-bold text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Password *</label>
+              <input
+                type="password"
+                required
+                value={loginForm.password}
+                onChange={e => setLoginForm(f => ({ ...f, password: e.target.value }))}
+                placeholder="Enter password..."
+                className="w-full bg-slate-950 border border-slate-800 focus:border-blue-500 rounded-xl px-4 py-2.5 text-sm font-bold text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={authenticating}
+              className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-sm rounded-xl transition shadow-lg flex items-center justify-center gap-2"
+            >
+              {authenticating ? 'Authenticating...' : '🔓 Sign In to Workstation'}
+            </button>
+          </form>
+
+          <div className="border-t border-slate-800/80 pt-4 space-y-2">
+            <p className="text-[10px] font-black uppercase text-slate-500 text-center tracking-wider">Quick Preset Logins (Demo)</p>
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => { setLoginForm({ username: 'admin', password: 'aquacell2026' }) }}
+                className="p-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl text-center"
+              >
+                <span className="block text-[10px] font-bold text-red-400">🔴 Super Admin</span>
+                <span className="text-[10px] text-slate-400 font-mono">admin</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => { setLoginForm({ username: 'supervisor', password: 'super123' }) }}
+                className="p-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl text-center"
+              >
+                <span className="block text-[10px] font-bold text-amber-400">🟡 Supervisor</span>
+                <span className="text-[10px] text-slate-400 font-mono">supervisor</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => { setLoginForm({ username: 'refurb', password: 'repair123' }) }}
+                className="p-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl text-center"
+              >
+                <span className="block text-[10px] font-bold text-blue-400">🔵 Refurb Center</span>
+                <span className="text-[10px] text-slate-400 font-mono">refurb</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col font-sans text-gray-900">
       {/* MAIN APPLICATION CONTAINER (HIDDEN DURING PRINTING) */}
@@ -855,18 +1009,40 @@ export default function InventoryDashboardPage() {
         </form>
 
         <div className="flex items-center gap-2">
-          <a href="/AQUA-CELL-ERP-Setup.zip" download className="inline-flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs px-3.5 py-2 rounded-xl border border-slate-700 transition shadow-sm" title="Download Desktop App Installer (.exe)">
-            <Download className="w-4 h-4 text-cyan-400" /> Desktop App (.exe)
-          </a>
-          <button onClick={() => setShowScannerModal(true)} className="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs px-3.5 py-2 rounded-xl transition shadow-sm">
-            <Barcode className="w-4 h-4" /> Dispatch Batch
-          </button>
-          <button onClick={() => setShowImport(true)} className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-sm">
-            <Download className="w-4 h-4" /> Import Stock
-          </button>
-          <button onClick={() => setShowAdd(true)} className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-sm">
-            <Plus className="w-4 h-4" /> Add Device
-          </button>
+          {currentUser?.role !== 'REFURB' && (
+            <>
+              <a href="/AQUA-CELL-ERP-Setup.zip" download className="inline-flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs px-3.5 py-2 rounded-xl border border-slate-700 transition shadow-sm" title="Download Desktop App Installer (.exe)">
+                <Download className="w-4 h-4 text-cyan-400" /> Desktop App (.exe)
+              </a>
+              <button onClick={() => setShowScannerModal(true)} className="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs px-3.5 py-2 rounded-xl transition shadow-sm">
+                <Barcode className="w-4 h-4" /> Dispatch Batch
+              </button>
+              <button onClick={() => setShowImport(true)} className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-sm">
+                <Download className="w-4 h-4" /> Import Stock
+              </button>
+              <button onClick={() => setShowAdd(true)} className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-sm">
+                <Plus className="w-4 h-4" /> Add Device
+              </button>
+            </>
+          )}
+
+          {currentUser && (
+            <div className="flex items-center gap-2 pl-2 border-l border-slate-700">
+              <div className="text-right">
+                <p className="text-xs font-bold text-white leading-none">{currentUser.name}</p>
+                <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono font-black uppercase ${currentUser.role === 'ADMIN' ? 'bg-red-500/30 text-red-300 border border-red-500/40' : currentUser.role === 'SUPERVISOR' ? 'bg-amber-500/30 text-amber-300 border border-amber-500/40' : 'bg-blue-500/30 text-blue-300 border border-blue-500/40'}`}>
+                  {currentUser.role}
+                </span>
+              </div>
+              <button
+                onClick={handleLogout}
+                title="Sign Out"
+                className="p-2 bg-slate-800 hover:bg-red-900/60 text-slate-300 hover:text-white rounded-xl border border-slate-700 transition"
+              >
+                🚪
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
@@ -874,83 +1050,107 @@ export default function InventoryDashboardPage() {
       <div className="flex-1 flex overflow-hidden">
         {/* SIDEBAR NAVIGATION MODULE */}
         <aside className="w-72 bg-slate-950 text-slate-300 border-r border-slate-800 flex flex-col shrink-0 print:hidden overflow-y-auto">
-          <div className="p-4 border-b border-slate-800/80">
-            <p className="text-[10px] font-black uppercase text-slate-500 tracking-wider mb-2">ERP MODULE NAVIGATION</p>
-            <div className="space-y-1">
-              {[
-                { id: 'dashboard', label: 'Executive Dashboard', icon: LayoutDashboard, badge: null, color: 'text-blue-400' },
-                { id: 'inventory', label: 'All Stock Inventory', icon: Layers, badge: devices.length, color: 'text-indigo-400' },
-              ].map(item => (
-                <button
-                  key={item.id}
-                  onClick={() => setTab(item.id as TabType)}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-bold text-xs transition ${tab === item.id ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-slate-900 text-slate-300'}`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <item.icon className={`w-4 h-4 ${tab === item.id ? 'text-white' : item.color}`} />
-                    <span>{item.label}</span>
-                  </div>
-                  {item.badge !== null && (
+          {currentUser?.role === 'REFURB' ? (
+            <div className="p-4 space-y-1">
+              <p className="text-[10px] font-black uppercase text-amber-500 tracking-wider mb-2">WORKSTATION MODULE</p>
+              <button
+                onClick={() => setTab('batches')}
+                className="w-full flex items-center justify-between px-3.5 py-3 rounded-xl font-extrabold text-xs bg-amber-500 text-slate-950 shadow-md"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Clock className="w-4 h-4 text-slate-950" />
+                  <span className="truncate">Assigned Repair Batches</span>
+                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-mono font-black bg-slate-950/20 text-slate-950">
+                  {safeBatches.filter(b => b && (
+                    (currentUser?.centerId && b.refurbCenterId === currentUser.centerId) ||
+                    (currentUser?.batchNumber && safeLower(b.batchNumber) === safeLower(currentUser.batchNumber)) ||
+                    (!currentUser?.centerId && !currentUser?.batchNumber)
+                  )).length}
+                </span>
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="p-4 border-b border-slate-800/80">
+                <p className="text-[10px] font-black uppercase text-slate-500 tracking-wider mb-2">ERP MODULE NAVIGATION</p>
+                <div className="space-y-1">
+                  {[
+                    { id: 'dashboard', label: 'Executive Dashboard', icon: LayoutDashboard, badge: null, color: 'text-blue-400' },
+                    { id: 'inventory', label: 'All Stock Inventory', icon: Layers, badge: devices.length, color: 'text-indigo-400' },
+                  ].map(item => (
+                    <button
+                      key={item.id}
+                      onClick={() => setTab(item.id as TabType)}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-bold text-xs transition ${tab === item.id ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-slate-900 text-slate-300'}`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <item.icon className={`w-4 h-4 ${tab === item.id ? 'text-white' : item.color}`} />
+                        <span>{item.label}</span>
+                      </div>
+                      {item.badge !== null && (
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-black ${tab === item.id ? 'bg-white/20 text-white' : 'bg-slate-800 text-slate-400'}`}>
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 6-STAGE WORKFLOW ENGINE SIDEBAR MODULE */}
+              <div className="p-4 border-b border-slate-800/80 space-y-1">
+                <p className="text-[10px] font-black uppercase text-amber-500 tracking-wider mb-2">6-STAGE REFURB WORKFLOW</p>
+                {[
+                  { id: 'initialQc', label: '1. Raw Stock (Initial QC)', icon: Package, count: rawStockDevices.length, alert: rawStockDevices.length > 0, color: 'text-blue-400' },
+                  { id: 'rawQcDone', label: '2. Raw QC Done Stock', icon: CheckCircle2, count: rawQcDoneDevices.length, color: 'text-teal-400' },
+                  { id: 'batches', label: '3. Repair Batches & Timers', icon: Clock, count: batches.length, color: 'text-amber-400' },
+                  { id: 'afterFixQc', label: '4. After-Fix QC Desk', icon: ShieldCheck, count: afterFixQcDevices.length, alert: afterFixQcDevices.length > 0, color: 'text-purple-400' },
+                  { id: 'readyToSell', label: '5. Ready to Sell Stock', icon: Check, count: readyToSellDevices.length, color: 'text-green-400' },
+                  { id: 'masterCheck', label: '6. Master Check Desk', icon: Lock, count: masterCheckPendingDevices.length, alert: masterCheckPendingDevices.length > 0, color: 'text-red-400' },
+                ].map(item => (
+                  <button
+                    key={item.id}
+                    onClick={() => setTab(item.id as TabType)}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-bold text-xs transition ${tab === item.id ? 'bg-amber-500 text-slate-950 shadow-md font-extrabold' : 'hover:bg-slate-900 text-slate-300'}`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <item.icon className={`w-4 h-4 ${tab === item.id ? 'text-slate-950' : item.color}`} />
+                      <span className="truncate">{item.label}</span>
+                    </div>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-black ${item.alert ? 'bg-red-500 text-white animate-pulse' : tab === item.id ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>
+                      {item.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {/* FINANCIAL & MANAGEMENT SIDEBAR MODULE */}
+              <div className="p-4 space-y-1">
+                <p className="text-[10px] font-black uppercase text-slate-500 tracking-wider mb-2">FINANCIAL &amp; ACCOUNTS</p>
+                {[
+                  { id: 'clients', label: 'Client Accounts & Billing', icon: Users, badge: clients.length, color: 'text-cyan-400' },
+                  { id: 'sales', label: 'Sales & Invoices Ledger', icon: ShoppingCart, badge: sales.length, color: 'text-emerald-400' },
+                  { id: 'accounts', label: 'Refurb Payables & Accounts', icon: DollarSign, badge: `AED ${totalPayablesAed.toFixed(0)}`, color: 'text-red-400' },
+                  { id: 'centers', label: 'Refurb Centers Directory', icon: Building2, badge: centers.length, color: 'text-slate-400' },
+                ].map(item => (
+                  <button
+                    key={item.id}
+                    onClick={() => setTab(item.id as TabType)}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-bold text-xs transition ${tab === item.id ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-slate-900 text-slate-300'}`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <item.icon className={`w-4 h-4 ${tab === item.id ? 'text-white' : item.color}`} />
+                      <span className="truncate">{item.label}</span>
+                    </div>
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-black ${tab === item.id ? 'bg-white/20 text-white' : 'bg-slate-800 text-slate-400'}`}>
                       {item.badge}
                     </span>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 6-STAGE WORKFLOW ENGINE SIDEBAR MODULE */}
-          <div className="p-4 border-b border-slate-800/80 space-y-1">
-            <p className="text-[10px] font-black uppercase text-amber-500 tracking-wider mb-2">6-STAGE REFURB WORKFLOW</p>
-            {[
-              { id: 'initialQc', label: '1. Raw Stock (Initial QC)', icon: Package, count: rawStockDevices.length, alert: rawStockDevices.length > 0, color: 'text-blue-400' },
-              { id: 'rawQcDone', label: '2. Raw QC Done Stock', icon: CheckCircle2, count: rawQcDoneDevices.length, color: 'text-teal-400' },
-              { id: 'batches', label: '3. Repair Batches & Timers', icon: Clock, count: batches.length, color: 'text-amber-400' },
-              { id: 'afterFixQc', label: '4. After-Fix QC Desk', icon: ShieldCheck, count: afterFixQcDevices.length, alert: afterFixQcDevices.length > 0, color: 'text-purple-400' },
-              { id: 'readyToSell', label: '5. Ready to Sell Stock', icon: Check, count: readyToSellDevices.length, color: 'text-green-400' },
-              { id: 'masterCheck', label: '6. Master Check Desk', icon: Lock, count: masterCheckPendingDevices.length, alert: masterCheckPendingDevices.length > 0, color: 'text-red-400' },
-            ].map(item => (
-              <button
-                key={item.id}
-                onClick={() => setTab(item.id as TabType)}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-bold text-xs transition ${tab === item.id ? 'bg-amber-500 text-slate-950 shadow-md font-extrabold' : 'hover:bg-slate-900 text-slate-300'}`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <item.icon className={`w-4 h-4 ${tab === item.id ? 'text-slate-950' : item.color}`} />
-                  <span className="truncate">{item.label}</span>
-                </div>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-black ${item.alert ? 'bg-red-500 text-white animate-pulse' : tab === item.id ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>
-                  {item.count}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          {/* FINANCIAL & MANAGEMENT SIDEBAR MODULE */}
-          <div className="p-4 space-y-1">
-            <p className="text-[10px] font-black uppercase text-slate-500 tracking-wider mb-2">FINANCIAL &amp; ACCOUNTS</p>
-            {[
-              { id: 'clients', label: 'Client Accounts & Billing', icon: Users, badge: clients.length, color: 'text-cyan-400' },
-              { id: 'sales', label: 'Sales & Invoices Ledger', icon: ShoppingCart, badge: sales.length, color: 'text-emerald-400' },
-              { id: 'accounts', label: 'Refurb Payables & Accounts', icon: DollarSign, badge: `AED ${totalPayablesAed.toFixed(0)}`, color: 'text-red-400' },
-              { id: 'centers', label: 'Refurb Centers Directory', icon: Building2, badge: centers.length, color: 'text-slate-400' },
-            ].map(item => (
-              <button
-                key={item.id}
-                onClick={() => setTab(item.id as TabType)}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl font-bold text-xs transition ${tab === item.id ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-slate-900 text-slate-300'}`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <item.icon className={`w-4 h-4 ${tab === item.id ? 'text-white' : item.color}`} />
-                  <span className="truncate">{item.label}</span>
-                </div>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-black ${tab === item.id ? 'bg-white/20 text-white' : 'bg-slate-800 text-slate-400'}`}>
-                  {item.badge}
-                </span>
-              </button>
-            ))}
-          </div>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
 
           <div className="mt-auto p-4 border-t border-slate-900 text-[10px] text-slate-500 text-center">
             AQUA CELL LLC • Naif Mobile Market, Dubai
@@ -959,7 +1159,8 @@ export default function InventoryDashboardPage() {
 
         {/* MAIN WORKSPACE VIEW */}
         <main className="flex-1 overflow-y-auto p-6 space-y-5">
-          {/* TOP SUMMARY CARDS BAR (Always visible for fast executive overview) */}
+          {/* TOP SUMMARY CARDS BAR (Visible for Admin and Supervisor) */}
+          {currentUser?.role !== 'REFURB' && (
           <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
             {[
               { label: 'Total Inventory', value: devices.length, icon: Package, bg: 'bg-blue-50', color: 'text-blue-600', t: 'inventory' },
@@ -979,6 +1180,7 @@ export default function InventoryDashboardPage() {
               </button>
             ))}
           </div>
+          )}
 
           {/* TAB 1: EXECUTIVE DASHBOARD */}
           {tab === 'dashboard' && (
@@ -1248,20 +1450,33 @@ export default function InventoryDashboardPage() {
 
           {/* TAB 5: REPAIR BATCHES & TIMERS */}
           {tab === 'batches' && (() => {
+            const userRole = currentUser?.role
+            const centerId = currentUser?.centerId
+            const batchNo = currentUser?.batchNumber
+
+            const scopedBatches = safeBatches.filter(b => {
+              if (!b) return false
+              if (userRole === 'REFURB') {
+                if (centerId) return b.refurbCenterId === centerId
+                if (batchNo) return safeLower(b.batchNumber) === safeLower(batchNo)
+              }
+              return true
+            })
+
             const q = batchScanImei.trim().toLowerCase()
             let matchedUnit: { batch: Batch; device: BatchDevice } | null = null
             if (q) {
-              for (const b of batches) {
-                const bd = b.devices.find(d => d.imei.toLowerCase() === q || d.imei.toLowerCase().endsWith(q))
+              for (const b of scopedBatches) {
+                const bd = b.devices.find(d => d && (safeLower(d.imei) === q || safeLower(d.imei).endsWith(q)))
                 if (bd) { matchedUnit = { batch: b, device: bd }; break }
               }
             }
 
-            const displayBatches = q ? batches.filter(b =>
-              b.batchNumber.toLowerCase().includes(q) ||
-              b.refurbCenterName.toLowerCase().includes(q) ||
-              b.devices.some(d => d.imei.toLowerCase().includes(q) || d.model.toLowerCase().includes(q))
-            ) : batches
+            const displayBatches = q ? scopedBatches.filter(b =>
+              safeLower(b.batchNumber).includes(q) ||
+              safeLower(b.refurbCenterName).includes(q) ||
+              b.devices.some(d => d && (safeLower(d.imei).includes(q) || safeLower(d.model).includes(q)))
+            ) : scopedBatches
 
             return (
               <div className="space-y-4">
@@ -1270,9 +1485,11 @@ export default function InventoryDashboardPage() {
                     <h2 className="font-extrabold text-base">Stage 3: Refurb Repair Batches &amp; Real-Time SLA Timers</h2>
                     <p className="text-xs text-amber-200 font-medium">Track physical handover manifests, dispatch turnaround timers, and 🔴 RE-REPAIR stock flags per batch.</p>
                   </div>
-                  <button onClick={() => setShowNewBatch(true)} className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs rounded-xl transition shadow-sm flex items-center gap-1.5">
-                    <Plus className="w-4 h-4" /> Create New Repair Batch
-                  </button>
+                  {currentUser?.role !== 'REFURB' && (
+                    <button onClick={() => setShowNewBatch(true)} className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs rounded-xl transition shadow-sm flex items-center gap-1.5">
+                      <Plus className="w-4 h-4" /> Create New Repair Batch
+                    </button>
+                  )}
                 </div>
 
                 {/* BATCH IMEI SEARCH & BARCODE SCANNER */}
@@ -1809,9 +2026,11 @@ export default function InventoryDashboardPage() {
                         <button onClick={() => openEditCenterModal(c)} title="Edit Refurb Center" className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg">
                           <Pencil className="w-4 h-4" />
                         </button>
-                        <button onClick={() => deleteRefurbCenter(c.id)} title="Delete Refurb Center" className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {currentUser?.role === 'ADMIN' && (
+                          <button onClick={() => deleteRefurbCenter(c.id)} title="Delete Refurb Center" className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
                     <p className="text-xs text-gray-600">📞 {c.contact || 'No Phone'}</p>
