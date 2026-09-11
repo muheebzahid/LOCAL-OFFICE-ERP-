@@ -201,7 +201,6 @@ export default function InventoryDashboardPage() {
   const [invoiceData, setInvoiceData] = useState<{ device: Device; sale: Sale } | null>(null)
   const [showImport, setShowImport] = useState(false)
   const [importText, setImportText] = useState('')
-  const [showScannerModal, setShowScannerModal] = useState(false)
   const [saving, setSaving] = useState(false)
 
   // Refurb engine modals
@@ -1095,9 +1094,6 @@ export default function InventoryDashboardPage() {
               <a href="/AQUA-CELL-ERP-Setup.zip" download className="inline-flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs px-3.5 py-2 rounded-xl border border-slate-700 transition shadow-sm" title="Download Desktop App Installer (.exe)">
                 <Download className="w-4 h-4 text-cyan-400" /> Desktop App (.exe)
               </a>
-              <button onClick={() => setShowScannerModal(true)} className="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold text-xs px-3.5 py-2 rounded-xl transition shadow-sm">
-                <Barcode className="w-4 h-4" /> Dispatch Batch
-              </button>
               <button onClick={() => setShowImport(true)} className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition shadow-sm">
                 <Download className="w-4 h-4" /> Import Stock
               </button>

@@ -15,19 +15,19 @@
       "static/css/0f00ff6b061147b7.css",
       "static/chunks/app/layout-931a55e5656ab2d3.js"
     ],
-    "/api/after-fix-qc/route": [
+    "/api/backup/route": [
       "static/chunks/webpack-805a0dfa34ae3270.js",
       "static/chunks/4bd1b696-675859e65f0c0d82.js",
       "static/chunks/587-2f4c6947d06553c9.js",
       "static/chunks/main-app-515ae6a509617a36.js",
-      "static/chunks/app/api/after-fix-qc/route-2026085be34bf76e.js"
+      "static/chunks/app/api/backup/route-49a56e6419fadc09.js"
     ],
-    "/api/auth/login/route": [
+    "/api/batches/route": [
       "static/chunks/webpack-805a0dfa34ae3270.js",
       "static/chunks/4bd1b696-675859e65f0c0d82.js",
       "static/chunks/587-2f4c6947d06553c9.js",
       "static/chunks/main-app-515ae6a509617a36.js",
-      "static/chunks/app/api/auth/login/route-baa3e22176eb57a9.js"
+      "static/chunks/app/api/batches/route-a76ae2767800edd4.js"
     ],
     "/api/batches/[id]/route": [
       "static/chunks/webpack-805a0dfa34ae3270.js",
@@ -36,12 +36,19 @@
       "static/chunks/main-app-515ae6a509617a36.js",
       "static/chunks/app/api/batches/[id]/route-54aa86c9bd4df34b.js"
     ],
-    "/api/backup/route": [
+    "/api/auth/login/route": [
       "static/chunks/webpack-805a0dfa34ae3270.js",
       "static/chunks/4bd1b696-675859e65f0c0d82.js",
       "static/chunks/587-2f4c6947d06553c9.js",
       "static/chunks/main-app-515ae6a509617a36.js",
-      "static/chunks/app/api/backup/route-49a56e6419fadc09.js"
+      "static/chunks/app/api/auth/login/route-baa3e22176eb57a9.js"
+    ],
+    "/api/after-fix-qc/route": [
+      "static/chunks/webpack-805a0dfa34ae3270.js",
+      "static/chunks/4bd1b696-675859e65f0c0d82.js",
+      "static/chunks/587-2f4c6947d06553c9.js",
+      "static/chunks/main-app-515ae6a509617a36.js",
+      "static/chunks/app/api/after-fix-qc/route-2026085be34bf76e.js"
     ],
     "/api/clients/[id]/route": [
       "static/chunks/webpack-805a0dfa34ae3270.js",
@@ -49,13 +56,6 @@
       "static/chunks/587-2f4c6947d06553c9.js",
       "static/chunks/main-app-515ae6a509617a36.js",
       "static/chunks/app/api/clients/[id]/route-b907947832c063f4.js"
-    ],
-    "/api/batches/route": [
-      "static/chunks/webpack-805a0dfa34ae3270.js",
-      "static/chunks/4bd1b696-675859e65f0c0d82.js",
-      "static/chunks/587-2f4c6947d06553c9.js",
-      "static/chunks/main-app-515ae6a509617a36.js",
-      "static/chunks/app/api/batches/route-a76ae2767800edd4.js"
     ],
     "/api/clients/route": [
       "static/chunks/webpack-805a0dfa34ae3270.js",
@@ -92,13 +92,6 @@
       "static/chunks/main-app-515ae6a509617a36.js",
       "static/chunks/app/api/initial-qc/route-115b843e4843cc7c.js"
     ],
-    "/api/master-check/route": [
-      "static/chunks/webpack-805a0dfa34ae3270.js",
-      "static/chunks/4bd1b696-675859e65f0c0d82.js",
-      "static/chunks/587-2f4c6947d06553c9.js",
-      "static/chunks/main-app-515ae6a509617a36.js",
-      "static/chunks/app/api/master-check/route-3aa5b9bd8854d8be.js"
-    ],
     "/api/qc/route": [
       "static/chunks/webpack-805a0dfa34ae3270.js",
       "static/chunks/4bd1b696-675859e65f0c0d82.js",
@@ -106,12 +99,26 @@
       "static/chunks/main-app-515ae6a509617a36.js",
       "static/chunks/app/api/qc/route-7a4c636826a4e8c5.js"
     ],
+    "/api/master-check/route": [
+      "static/chunks/webpack-805a0dfa34ae3270.js",
+      "static/chunks/4bd1b696-675859e65f0c0d82.js",
+      "static/chunks/587-2f4c6947d06553c9.js",
+      "static/chunks/main-app-515ae6a509617a36.js",
+      "static/chunks/app/api/master-check/route-3aa5b9bd8854d8be.js"
+    ],
     "/api/refurb-centers/[id]/route": [
       "static/chunks/webpack-805a0dfa34ae3270.js",
       "static/chunks/4bd1b696-675859e65f0c0d82.js",
       "static/chunks/587-2f4c6947d06553c9.js",
       "static/chunks/main-app-515ae6a509617a36.js",
       "static/chunks/app/api/refurb-centers/[id]/route-ad60dfe7dd27af10.js"
+    ],
+    "/api/refurb-centers/payments/route": [
+      "static/chunks/webpack-805a0dfa34ae3270.js",
+      "static/chunks/4bd1b696-675859e65f0c0d82.js",
+      "static/chunks/587-2f4c6947d06553c9.js",
+      "static/chunks/main-app-515ae6a509617a36.js",
+      "static/chunks/app/api/refurb-centers/payments/route-ae82ddec3d4728e9.js"
     ],
     "/api/refurb-centers/route": [
       "static/chunks/webpack-805a0dfa34ae3270.js",
@@ -134,13 +141,6 @@
       "static/chunks/main-app-515ae6a509617a36.js",
       "static/chunks/app/api/sales/route-581be8068e8d7135.js"
     ],
-    "/api/refurb-centers/payments/route": [
-      "static/chunks/webpack-805a0dfa34ae3270.js",
-      "static/chunks/4bd1b696-675859e65f0c0d82.js",
-      "static/chunks/587-2f4c6947d06553c9.js",
-      "static/chunks/main-app-515ae6a509617a36.js",
-      "static/chunks/app/api/refurb-centers/payments/route-ae82ddec3d4728e9.js"
-    ],
     "/refurb/page": [
       "static/chunks/webpack-805a0dfa34ae3270.js",
       "static/chunks/4bd1b696-675859e65f0c0d82.js",
@@ -154,7 +154,7 @@
       "static/chunks/587-2f4c6947d06553c9.js",
       "static/chunks/main-app-515ae6a509617a36.js",
       "static/chunks/553-6e105a0fdcf39501.js",
-      "static/chunks/app/page-2665abd1465e2999.js"
+      "static/chunks/app/page-7de79792efaad195.js"
     ]
   }
 }
