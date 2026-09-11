@@ -281,26 +281,32 @@ export default function InventoryDashboardPage() {
   useEffect(() => { loadData() }, [])
 
   // Collections
-  const rawStockDevices = devices.filter(d => d.status === 'RAW_STOCK' && !d.initialQcReport)
-  const rawQcDoneDevices = devices.filter(d => d.status === 'RAW_QC_DONE' || (d.initialQcReport && d.status !== 'AT_REPAIR' && d.status !== 'SOLD' && d.status !== 'IN_STOCK'))
-  const selectableBatchDevices = devices.filter(d => d.status === 'RAW_QC_DONE' || d.status === 'QC_FAILED_RETRY' || d.status === 'MASTER_CHECK_APPROVED')
-  const atRepairDevices = devices.filter(d => d.status === 'AT_REPAIR')
-  const afterFixQcDevices = devices.filter(d => d.status === 'AFTER_FIX_QC' || d.status === 'IN_QC')
-  const readyToSellDevices = devices.filter(d => d.status === 'IN_STOCK')
-  const soldDevices = devices.filter(d => d.status === 'SOLD')
-  const masterCheckPendingDevices = devices.filter(d => d.status === 'MASTER_CHECK_PENDING')
+  const safeDevices = Array.isArray(devices) ? devices : []
+  const safeBatches = Array.isArray(batches) ? batches : []
+  const safeSales = Array.isArray(sales) ? sales : []
+  const safeCenters = Array.isArray(centers) ? centers : []
+
+  const rawStockDevices = safeDevices.filter(d => d && d.status === 'RAW_STOCK' && !d.initialQcReport)
+  const rawQcDoneDevices = safeDevices.filter(d => d && (d.status === 'RAW_QC_DONE' || (d.initialQcReport && d.status !== 'AT_REPAIR' && d.status !== 'SOLD' && d.status !== 'IN_STOCK')))
+  const selectableBatchDevices = safeDevices.filter(d => d && (d.status === 'RAW_QC_DONE' || d.status === 'QC_FAILED_RETRY' || d.status === 'MASTER_CHECK_APPROVED'))
+  const atRepairDevices = safeDevices.filter(d => d && d.status === 'AT_REPAIR')
+  const afterFixQcDevices = safeDevices.filter(d => d && (d.status === 'AFTER_FIX_QC' || d.status === 'IN_QC'))
+  const readyToSellDevices = safeDevices.filter(d => d && d.status === 'IN_STOCK')
+  const soldDevices = safeDevices.filter(d => d && d.status === 'SOLD')
+  const masterCheckPendingDevices = safeDevices.filter(d => d && d.status === 'MASTER_CHECK_PENDING')
 
   function getBatchInfoForDevice(deviceId: string, imei: string) {
-    const b = batches.find(batch => batch.devices.some(d => d.deviceId === deviceId || d.imei === imei))
-    if (b) return { batchNumber: b.batchNumber, centerName: b.refurbCenterName }
+    const b = safeBatches.find(batch => batch && Array.isArray(batch.devices) && batch.devices.some(d => d && (d.deviceId === deviceId || d.imei === imei)))
+    if (b) return { batchNumber: b.batchNumber || '—', centerName: b.refurbCenterName || '—' }
     return { batchNumber: '—', centerName: '—' }
   }
 
   // Universal IMEI Locator
   function locateUnitByImei(queryStr: string) {
+    if (!queryStr || typeof queryStr !== 'string') return
     const q = queryStr.trim().toLowerCase()
     if (!q) return
-    const target = devices.find(d => d.imei.toLowerCase() === q || d.imei.toLowerCase().endsWith(q))
+    const target = safeDevices.find(d => d && d.imei && (d.imei.toLowerCase() === q || d.imei.toLowerCase().endsWith(q)))
     if (!target) {
       showToast(`❌ No device found matching IMEI '${queryStr}' in system`, false)
       return
@@ -734,10 +740,15 @@ export default function InventoryDashboardPage() {
   }
 
   // Inventory Table Filter & Sort
-  const filtered = devices.filter(d => {
+  const filtered = safeDevices.filter(d => {
+    if (!d) return false
     if (filterStatus !== 'ALL' && d.status !== filterStatus) return false
-    const q = search.toLowerCase()
-    return !q || d.imei.includes(q) || d.model.toLowerCase().includes(q) || d.color.toLowerCase().includes(q) || d.faults.toLowerCase().includes(q)
+    const q = (search || '').toLowerCase()
+    return !q ||
+      (d.imei || '').toLowerCase().includes(q) ||
+      (d.model || '').toLowerCase().includes(q) ||
+      (d.color || '').toLowerCase().includes(q) ||
+      (d.faults || '').toLowerCase().includes(q)
   })
   const displayDevices = sortCol ? [...filtered].sort((a, b) => {
     const av = String((a as unknown as Record<string, unknown>)[sortCol] ?? '')
@@ -746,8 +757,8 @@ export default function InventoryDashboardPage() {
     return sortDir === 'asc' ? c : -c
   }) : filtered
 
-  const totalPayablesAed = centers.reduce((sum, c) => sum + (c.unpaidBalanceAed || 0), 0)
-  const totalSalesAed = sales.reduce((sum, s) => sum + (s.sellingPriceAed || 0), 0)
+  const totalPayablesAed = safeCenters.reduce((sum, c) => sum + (c?.unpaidBalanceAed || 0), 0)
+  const totalSalesAed = safeSales.reduce((sum, s) => sum + (s?.sellingPriceAed || 0), 0)
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col font-sans text-gray-900">
@@ -3846,13 +3857,13 @@ export default function InventoryDashboardPage() {
                 </label>
                 <div className="flex flex-wrap gap-1.5 bg-gray-50 p-3 rounded-xl border border-gray-200 max-h-36 overflow-y-auto">
                   {['HOUSING', 'BACK GLASS', 'DISPLAY MSG', 'BATTERY MSG', 'BATTERY', 'LCD', 'NFC', 'FACE ID', 'FRONT CAMERA', 'BACK CAMERA', 'FLEX', 'SENSOR', 'BOARD', 'FLASHLIGHT', 'FRONT SPEAKER', 'SIM LOCKED', 'LCD DEMAGE', 'CAMERA SHAKING', 'TOUCH ISSUES', 'WATER DAMAGE'].map(preset => {
-                    const isSelected = editFaultsText.toUpperCase().includes(preset)
+                    const isSelected = (editFaultsText || '').toUpperCase().includes(preset)
                     return (
                       <button
                         key={preset}
                         type="button"
                         onClick={() => {
-                          let currentArr = editFaultsText.split(',').map(s => s.trim()).filter(Boolean)
+                          let currentArr = (editFaultsText || '').split(',').map(s => s.trim()).filter(Boolean)
                           const upperArr = currentArr.map(s => s.toUpperCase())
                           if (upperArr.includes(preset)) {
                             currentArr = currentArr.filter(s => s.toUpperCase() !== preset)
