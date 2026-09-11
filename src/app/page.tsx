@@ -150,7 +150,7 @@ export default function InventoryDashboardPage() {
   const [loading, setLoading] = useState(true)
 
   // Module Tab State
-  type TabType = 'dashboard' | 'inventory' | 'initialQc' | 'rawQcDone' | 'batches' | 'afterFixQc' | 'readyToSell' | 'masterCheck' | 'accounts' | 'centers' | 'sales' | 'clients'
+  type TabType = 'dashboard' | 'inventory' | 'batches' | 'afterFixQc' | 'readyToSell' | 'masterCheck' | 'accounts' | 'centers' | 'sales' | 'clients'
   const [tab, setTab] = useState<TabType>('dashboard')
 
   // Search & Filter state
@@ -497,13 +497,10 @@ export default function InventoryDashboardPage() {
       return
     }
 
-    if (target.status === 'RAW_STOCK') {
-      setTab('initialQc')
-      openInitialQcModal(target)
-      showToast(`📍 Found IMEI ${target.imei} in Stage 1: Raw Stock. Opened Initial QC modal.`)
-    } else if (target.status === 'RAW_QC_DONE') {
-      setTab('rawQcDone')
-      showToast(`📍 Found IMEI ${target.imei} in Stage 2: Raw QC Done Stock.`)
+    if (target.status === 'RAW_STOCK' || target.status === 'RAW_QC_DONE') {
+      setTab('inventory')
+      setSearch(target.imei)
+      showToast(`📍 Found IMEI ${target.imei} in All Stock Inventory.`)
     } else if (target.status === 'AT_REPAIR') {
       setTab('batches')
       const b = batches.find(batch => batch.devices.some(d => d.deviceId === target.id || d.imei === target.imei))
@@ -1250,16 +1247,14 @@ export default function InventoryDashboardPage() {
                 </div>
               </div>
 
-              {/* 6-STAGE WORKFLOW ENGINE SIDEBAR MODULE */}
+              {/* WORKFLOW MODULE NAVIGATION */}
               <div className="p-4 border-b border-slate-800/80 space-y-1">
-                <p className="text-[10px] font-black uppercase text-amber-500 tracking-wider mb-2">6-STAGE REFURB WORKFLOW</p>
+                <p className="text-[10px] font-black uppercase text-amber-500 tracking-wider mb-2">REFURB WORKFLOW &amp; DESKS</p>
                 {[
-                  { id: 'initialQc', label: '1. Raw Stock (Initial QC)', icon: Package, count: rawStockDevices.length, alert: rawStockDevices.length > 0, color: 'text-blue-400' },
-                  { id: 'rawQcDone', label: '2. Raw QC Done Stock', icon: CheckCircle2, count: rawQcDoneDevices.length, color: 'text-teal-400' },
-                  { id: 'batches', label: '3. Repair Batches & Timers', icon: Clock, count: batches.length, color: 'text-amber-400' },
-                  { id: 'afterFixQc', label: '4. After-Fix QC Desk', icon: ShieldCheck, count: afterFixQcDevices.length, alert: afterFixQcDevices.length > 0, color: 'text-purple-400' },
-                  { id: 'readyToSell', label: '5. Ready to Sell Stock', icon: Check, count: readyToSellDevices.length, color: 'text-green-400' },
-                  { id: 'masterCheck', label: '6. Master Check Desk', icon: Lock, count: masterCheckPendingDevices.length, alert: masterCheckPendingDevices.length > 0, color: 'text-red-400' },
+                  { id: 'batches', label: '1. Repair Batches & SLA Timers', icon: Clock, count: batches.length, color: 'text-amber-400' },
+                  { id: 'afterFixQc', label: '2. After-Fix QC Desk', icon: ShieldCheck, count: afterFixQcDevices.length, alert: afterFixQcDevices.length > 0, color: 'text-purple-400' },
+                  { id: 'readyToSell', label: '3. Ready to Sell Stock', icon: Check, count: readyToSellDevices.length, color: 'text-green-400' },
+                  { id: 'masterCheck', label: '4. Master Check Desk', icon: Lock, count: masterCheckPendingDevices.length, alert: masterCheckPendingDevices.length > 0, color: 'text-red-400' },
                 ].map(item => (
                   <button
                     key={item.id}
@@ -1356,7 +1351,7 @@ export default function InventoryDashboardPage() {
                     <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">{rawStockDevices.length} Units</span>
                   </div>
                   <p className="text-xs text-gray-500">Stock awaiting Initial QC inspection before refurb batching.</p>
-                  <button onClick={() => setTab('initialQc')} className="w-full py-2 bg-blue-50 text-blue-700 font-bold text-xs rounded-xl hover:bg-blue-100 border border-blue-200">Open Initial QC Desk →</button>
+                  <button onClick={() => setTab('inventory')} className="w-full py-2 bg-blue-50 text-blue-700 font-bold text-xs rounded-xl hover:bg-blue-100 border border-blue-200">View All Stock Inventory →</button>
                 </div>
 
                 <div className="bg-white rounded-2xl p-5 border border-gray-200 shadow-xs space-y-3">
@@ -1423,24 +1418,40 @@ export default function InventoryDashboardPage() {
                           <td className="px-3 py-2.5 text-blue-700 font-black">AED {d.sellingPriceAed || 0}</td>
                           <td className="px-3 py-2.5 text-center">
                             <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                              {/* DYNAMIC STAGE ACTION BUTTON */}
-                              {d.status === 'RAW_STOCK' && (
-                                <button
-                                  onClick={() => { setInitialQcModalDevice(d); setInitialQcFaults([]); setInitialQcNotes('') }}
-                                  className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-lg text-[10px] transition shadow-xs flex items-center gap-1 shrink-0"
-                                  title="Perform Initial QC -> Move to RAW QC DONE"
-                                >
-                                  <ShieldAlert className="w-3 h-3 text-blue-200" /> Initial QC
-                                </button>
-                              )}
-                              {d.status === 'RAW_QC_DONE' && (
-                                <button
-                                  onClick={() => { setSelectedBatchDeviceIds([d.id]); setShowNewBatch(true); setBatchStep(1) }}
-                                  className="px-2.5 py-1 bg-teal-700 hover:bg-teal-800 text-white font-extrabold rounded-lg text-[10px] transition shadow-xs flex items-center gap-1 shrink-0"
-                                  title="Dispatch to Refurb Center Batch"
-                                >
-                                  <Wrench className="w-3 h-3 text-teal-200" /> Dispatch Batch
-                                </button>
+                              {/* DIRECT EDIT & STATUS ACTIONS */}
+                              <button
+                                onClick={() => {
+                                  setEditDevice(d)
+                                  setEditForm({
+                                    imei: d.imei || '', model: d.model || '', storage: d.storage || '', color: d.color || '', faults: d.faults || '',
+                                    housing: d.housing || '', backGlass: d.backGlass || '', displayMsg: d.displayMsg || '', batteryMsg: d.batteryMsg || '',
+                                    battery: d.battery || '', lcd: d.lcd || '', nfc: d.nfc || '', faceId: d.faceId || '', frontCamera: d.frontCamera || '',
+                                    backCamera: d.backCamera || '', flex: d.flex || '', sensor: d.sensor || '', board: d.board || '', flashlight: d.flashlight || '',
+                                    frontSpeaker: d.frontSpeaker || '', costAed: String(d.costAed || ''), notes: d.notes || '', status: d.status || 'RAW_STOCK'
+                                  })
+                                }}
+                                className="p-1 rounded text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition"
+                                title="Edit Specifications, Faults & Status"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              {d.status !== 'SOLD' && (
+                                <>
+                                  <button
+                                    onClick={() => { setSelectedBatchDeviceIds([d.id]); setBatchModalMode('CREATE_NEW'); setBatchStep(1); setShowNewBatch(true); setTab('batches') }}
+                                    className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-extrabold rounded-lg text-[10px] transition shadow-xs flex items-center gap-1 shrink-0"
+                                    title="Add unit to a Repair Batch"
+                                  >
+                                    <Layers className="w-3 h-3" /> Repair Batch
+                                  </button>
+                                  <button
+                                    onClick={() => moveToReadyToSell(d)}
+                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-lg text-[10px] transition shadow-xs flex items-center gap-1 shrink-0"
+                                    title="Move unit directly to Ready to Sell stock"
+                                  >
+                                    <CheckCircle2 className="w-3 h-3" /> Ready to Sell
+                                  </button>
+                                </>
                               )}
                               {d.status === 'AT_REPAIR' && (
                                 <button
@@ -1503,117 +1514,7 @@ export default function InventoryDashboardPage() {
             </div>
           )}
 
-          {/* TAB 3: RAW STOCK (INITIAL QC) */}
-          {tab === 'initialQc' && (
-            <div className="space-y-4">
-              <div className="bg-blue-900 text-white rounded-2xl p-5 shadow-sm space-y-1">
-                <h2 className="font-extrabold text-base">Stage 1: Raw Stock Initial QC Desk</h2>
-                <p className="text-xs text-blue-200">Newly imported raw stock MUST pass initial QC inspection before becoming eligible for refurb dispatch.</p>
-              </div>
 
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                <table className="min-w-full text-xs">
-                  <thead className="bg-blue-50 text-blue-900 font-bold border-b border-blue-200">
-                    <tr>
-                      <th className="px-4 py-3 text-left">Model / Storage</th>
-                      <th className="px-4 py-3 text-left">Color</th>
-                      <th className="px-4 py-3 text-left font-mono">IMEI</th>
-                      <th className="px-4 py-3 text-left">Intake Date</th>
-                      <th className="px-4 py-3 text-left">Initial Status</th>
-                      <th className="px-4 py-3 text-center">QC Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rawStockDevices.length === 0 ? (
-                      <tr><td colSpan={6} className="py-16 text-center text-gray-400 italic">No raw stock currently awaiting initial QC inspection. All stock is inspected &amp; ready!</td></tr>
-                    ) : (
-                      rawStockDevices.map((d, i) => (
-                        <tr key={d.id} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-blue-50/20'}`}>
-                          <td className="px-4 py-3 font-bold text-gray-900">{d.model} {d.storage}</td>
-                          <td className="px-4 py-3">{d.color}</td>
-                          <td className="px-4 py-3 font-mono text-gray-700 font-bold">{d.imei}</td>
-                          <td className="px-4 py-3 text-gray-500">{new Date(d.intakeAt).toLocaleDateString('en-GB')}</td>
-                          <td className="px-4 py-3"><SBadge s={d.status} /></td>
-                          <td className="px-4 py-3 text-center">
-                            <div className="flex items-center justify-center gap-2 flex-wrap">
-                              <button onClick={() => openInitialQcModal(d)} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-lg text-xs transition shadow-sm inline-flex items-center gap-1">
-                                <ShieldAlert className="w-3.5 h-3.5 text-blue-200" /> Initial QC
-                              </button>
-                              <button onClick={() => { setSelectedBatchDeviceIds([d.id]); setBatchModalMode('CREATE_NEW'); setBatchStep(1); setShowNewBatch(true); setTab('batches') }} className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-extrabold rounded-lg text-xs transition inline-flex items-center gap-1 shadow-sm" title="Move directly to Repair Batch">
-                                <Layers className="w-3.5 h-3.5" /> Repair Batch
-                              </button>
-                              <button onClick={() => moveToReadyToSell(d)} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-lg text-xs transition inline-flex items-center gap-1 shadow-sm" title="Move directly to Ready to Sell">
-                                <CheckCircle2 className="w-3.5 h-3.5" /> Ready to Sell
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 4: RAW QC DONE STOCK */}
-          {tab === 'rawQcDone' && (
-            <div className="space-y-4">
-              <div className="bg-teal-900 text-white rounded-2xl p-5 shadow-sm space-y-1">
-                <h2 className="font-extrabold text-base">Stage 2: Raw QC Done Stock</h2>
-                <p className="text-xs text-teal-200">Stock with attached Initial QC inspection reports, fully verified &amp; eligible to be dispatched to Refurb Centers.</p>
-              </div>
-
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                <table className="min-w-full text-xs">
-                  <thead className="bg-teal-50 text-teal-900 font-bold border-b border-teal-200">
-                    <tr>
-                      <th className="px-4 py-3 text-left">Model</th>
-                      <th className="px-4 py-3 text-left">Color</th>
-                      <th className="px-4 py-3 text-left font-mono">IMEI</th>
-                      <th className="px-4 py-3 text-left">Logged Faults / Initial QC Findings</th>
-                      <th className="px-4 py-3 text-center">Dispatch Status &amp; QC Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rawQcDoneDevices.length === 0 ? (
-                      <tr><td colSpan={5} className="py-16 text-center text-gray-400 italic">No devices currently awaiting refurb dispatch in Raw QC Done Stock.</td></tr>
-                    ) : (
-                      rawQcDoneDevices.map((d, i) => (
-                        <tr key={d.id} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-teal-50/20'}`}>
-                          <td className="px-4 py-3 font-bold text-gray-900">{d.model} {d.storage}</td>
-                          <td className="px-4 py-3">{d.color}</td>
-                          <td className="px-4 py-3 font-mono text-gray-700 font-bold">{d.imei}</td>
-                          <td className="px-4 py-3 font-semibold text-orange-800">{d.faults || 'General Inspection Complete'}</td>
-                          <td className="px-4 py-3 text-center">
-                            <div className="flex items-center justify-center gap-2 flex-wrap">
-                              <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-teal-100 text-teal-800 border border-teal-300">
-                                ✓ ELIGIBLE FOR REFURB DISPATCH
-                              </span>
-                              <button
-                                onClick={() => { setSelectedBatchDeviceIds([d.id]); setBatchModalMode('CREATE_NEW'); setBatchStep(1); setShowNewBatch(true); setTab('batches') }}
-                                className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-[11px] rounded-lg shadow-sm transition inline-flex items-center gap-1"
-                                title="Move directly to Repair Batch"
-                              >
-                                <Layers className="w-3.5 h-3.5" /> Repair Batch
-                              </button>
-                              <button
-                                onClick={() => moveToReadyToSell(d)}
-                                className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] rounded-lg shadow-sm transition inline-flex items-center gap-1"
-                                title="Pass QC directly & move to Stage 5: Ready to Sell Stock"
-                              >
-                                <CheckCircle2 className="w-3.5 h-3.5" /> Pass QC ➔ Ready to Sell
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
 
           {/* TAB 5: REPAIR BATCHES & TIMERS */}
           {tab === 'batches' && (() => {
@@ -4648,6 +4549,122 @@ export default function InventoryDashboardPage() {
               <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
                 <button type="button" onClick={() => setEditClientModal(null)} className="px-4 py-2 rounded-lg border border-gray-300 font-semibold text-gray-600">Cancel</button>
                 <button type="submit" disabled={savingEditClient} className="px-5 py-2 rounded-lg bg-cyan-700 hover:bg-cyan-800 text-white font-bold">{savingEditClient ? 'Saving...' : 'Save Account Changes'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT DEVICE MODAL */}
+      {editDevice && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center px-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6 space-y-4 my-6">
+            <div className="flex justify-between items-center border-b border-gray-200 pb-3">
+              <h3 className="font-extrabold text-gray-900 text-base flex items-center gap-2">
+                <Pencil className="w-5 h-5 text-blue-600" /> Edit Device Specs, Faults &amp; Status — <span className="font-mono text-gray-700">{editDevice.imei}</span>
+              </h3>
+              <button onClick={() => setEditDevice(null)}><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+
+            <form onSubmit={async e => {
+              e.preventDefault()
+              setSaving(true)
+              const res = await fetch(`/api/devices/${editDevice.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  model: editForm.model,
+                  storage: editForm.storage,
+                  color: editForm.color,
+                  imei: editForm.imei,
+                  costAed: Number(editForm.costAed) || 0,
+                  status: editForm.status,
+                  faults: editForm.faults,
+                  notes: editForm.notes,
+                  housing: editForm.housing,
+                  backGlass: editForm.backGlass,
+                  displayMsg: editForm.displayMsg,
+                  batteryMsg: editForm.batteryMsg,
+                  battery: editForm.battery,
+                  lcd: editForm.lcd,
+                  nfc: editForm.nfc,
+                  faceId: editForm.faceId,
+                  frontCamera: editForm.frontCamera,
+                  backCamera: editForm.backCamera,
+                  flex: editForm.flex,
+                  sensor: editForm.sensor,
+                  board: editForm.board,
+                  flashlight: editForm.flashlight,
+                  frontSpeaker: editForm.frontSpeaker,
+                })
+              })
+              const updated = await res.json()
+              setSaving(false)
+              if (res.ok) {
+                setDevices(prev => prev.map(d => d.id === editDevice.id ? updated : d))
+                setEditDevice(null)
+                showToast(`✅ Device ${updated.model} (${updated.imei}) updated successfully!`)
+              } else {
+                showToast(updated.error || 'Failed to update device', false)
+              }
+            }} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Model</label>
+                  <select value={editForm.model} onChange={e => setEditForm(f => ({ ...f, model: e.target.value }))} className="w-full border border-gray-300 rounded-lg p-2 font-bold">
+                    {MODELS.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Storage</label>
+                  <select value={editForm.storage} onChange={e => setEditForm(f => ({ ...f, storage: e.target.value }))} className="w-full border border-gray-300 rounded-lg p-2 font-bold">
+                    {STORAGES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Color</label>
+                  <select value={editForm.color} onChange={e => setEditForm(f => ({ ...f, color: e.target.value }))} className="w-full border border-gray-300 rounded-lg p-2 font-bold">
+                    {COLORS.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Status</label>
+                  <select value={editForm.status} onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))} className="w-full border border-blue-400 bg-blue-50/40 rounded-lg p-2 font-bold text-blue-900">
+                    <option value="RAW_STOCK">📦 Raw Stock</option>
+                    <option value="IN_STOCK">🟢 Ready to Sell</option>
+                    <option value="AT_REPAIR">⏱️ At Repair</option>
+                    <option value="AFTER_FIX_QC">🔍 After-Fix QC</option>
+                    <option value="SOLD">🛑 Sold</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">IMEI *</label>
+                  <input required value={editForm.imei} onChange={e => setEditForm(f => ({ ...f, imei: e.target.value }))} className="w-full border border-gray-300 rounded-lg p-2 font-mono font-bold" />
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Cost (AED)</label>
+                  <input type="number" value={editForm.costAed} onChange={e => setEditForm(f => ({ ...f, costAed: e.target.value }))} className="w-full border border-gray-300 rounded-lg p-2 font-bold" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Faults / Issues</label>
+                <textarea value={editForm.faults} onChange={e => setEditForm(f => ({ ...f, faults: e.target.value }))} rows={2} className="w-full border border-gray-300 rounded-lg p-2" placeholder="e.g. Housing, Screen scratch, Face ID repair..." />
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">General Notes</label>
+                <input value={editForm.notes} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} className="w-full border border-gray-300 rounded-lg p-2" placeholder="Additional technician notes..." />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
+                <button type="button" onClick={() => setEditDevice(null)} className="px-4 py-2 border rounded-lg font-bold text-gray-600">Cancel</button>
+                <button type="submit" disabled={saving} className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-lg shadow-md">
+                  {saving ? 'Saving...' : '✓ Save Changes'}
+                </button>
               </div>
             </form>
           </div>
