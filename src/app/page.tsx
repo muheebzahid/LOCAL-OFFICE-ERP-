@@ -216,6 +216,20 @@ export default function InventoryDashboardPage() {
 
   const [viewBatch, setViewBatch] = useState<Batch | null>(null)
   const [showNewBatch, setShowNewBatch] = useState(false)
+  const [batchModalMode, setBatchModalMode] = useState<'CREATE_NEW' | 'ADD_TO_EXISTING'>('CREATE_NEW')
+  const [existingBatchTargetId, setExistingBatchTargetId] = useState('')
+  const [showScanFaultModal, setShowScanFaultModal] = useState(false)
+  const [scanFaultForm, setScanFaultForm] = useState({
+    imei: '',
+    model: '15 PRO',
+    storage: '128GB',
+    color: 'BLACK',
+    costAed: '1400',
+    faults: [] as string[],
+    notes: '',
+    destination: 'REPAIR_BATCH' as 'REPAIR_BATCH' | 'READY_TO_SELL' | 'RAW_QC_DONE',
+    targetBatchId: ''
+  })
   const [batchStep, setBatchStep] = useState<1 | 2>(1)
   const [batchCenter, setBatchCenter] = useState('')
   const [selectedBatchDeviceIds, setSelectedBatchDeviceIds] = useState<string[]>([])
@@ -423,7 +437,7 @@ export default function InventoryDashboardPage() {
 
   const rawStockDevices = safeDevices.filter(d => d && d.status === 'RAW_STOCK' && !d.initialQcReport)
   const rawQcDoneDevices = safeDevices.filter(d => d && (d.status === 'RAW_QC_DONE' || (d.initialQcReport && d.status !== 'AT_REPAIR' && d.status !== 'SOLD' && d.status !== 'IN_STOCK')))
-  const selectableBatchDevices = safeDevices.filter(d => d && (d.status === 'RAW_QC_DONE' || d.status === 'QC_FAILED_RETRY' || d.status === 'MASTER_CHECK_APPROVED'))
+  const selectableBatchDevices = safeDevices.filter(d => d && (d.status === 'RAW_STOCK' || d.status === 'RAW_QC_DONE' || d.status === 'QC_FAILED_RETRY' || d.status === 'MASTER_CHECK_APPROVED'))
   const atRepairDevices = safeDevices.filter(d => d && d.status === 'AT_REPAIR')
   const afterFixQcDevices = safeDevices.filter(d => d && (d.status === 'AFTER_FIX_QC' || d.status === 'IN_QC'))
   const readyToSellDevices = safeDevices.filter(d => d && d.status === 'IN_STOCK')
@@ -884,6 +898,33 @@ export default function InventoryDashboardPage() {
       }
     }
     reader.readAsText(file)
+  }
+
+  async function addStockToExistingBatch(targetBatchId?: string, deviceIds?: string[]) {
+    const bId = targetBatchId || existingBatchTargetId
+    const dIds = deviceIds || selectedBatchDeviceIds
+    if (!bId || dIds.length === 0) {
+      showToast('Select an existing batch and at least one device', false)
+      return
+    }
+    setSavingBatch(true)
+    const res = await fetch(`/api/batches/${bId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ addDeviceIds: dIds })
+    })
+    const data = await res.json()
+    setSavingBatch(false)
+    if (res.ok) {
+      setBatches(prev => prev.map(b => b.id === bId ? data.batch : b))
+      setDevices(data.devices)
+      setShowNewBatch(false)
+      setSelectedBatchDeviceIds([])
+      setExistingBatchTargetId('')
+      showToast(`✅ Added ${dIds.length} unit(s) to Batch ${data.batch.batchNumber}!`)
+    } else {
+      showToast(data.error || 'Failed to add stock to batch', false)
+    }
   }
 
   async function createBatch() {
@@ -1440,9 +1481,17 @@ export default function InventoryDashboardPage() {
                           <td className="px-4 py-3 text-gray-500">{new Date(d.intakeAt).toLocaleDateString('en-GB')}</td>
                           <td className="px-4 py-3"><SBadge s={d.status} /></td>
                           <td className="px-4 py-3 text-center">
-                            <button onClick={() => openInitialQcModal(d)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-lg text-xs transition shadow-sm inline-flex items-center gap-1.5">
-                              <ShieldAlert className="w-4 h-4 text-blue-200" /> Perform Initial QC
-                            </button>
+                            <div className="flex items-center justify-center gap-2 flex-wrap">
+                              <button onClick={() => openInitialQcModal(d)} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-lg text-xs transition shadow-sm inline-flex items-center gap-1">
+                                <ShieldAlert className="w-3.5 h-3.5 text-blue-200" /> Initial QC
+                              </button>
+                              <button onClick={() => { setSelectedBatchDeviceIds([d.id]); setBatchModalMode('CREATE_NEW'); setBatchStep(1); setShowNewBatch(true); setTab('batches') }} className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-extrabold rounded-lg text-xs transition inline-flex items-center gap-1 shadow-sm" title="Move directly to Repair Batch">
+                                <Layers className="w-3.5 h-3.5" /> Repair Batch
+                              </button>
+                              <button onClick={() => moveToReadyToSell(d)} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-lg text-xs transition inline-flex items-center gap-1 shadow-sm" title="Move directly to Ready to Sell">
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Ready to Sell
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))
@@ -1487,6 +1536,13 @@ export default function InventoryDashboardPage() {
                               <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-teal-100 text-teal-800 border border-teal-300">
                                 ✓ ELIGIBLE FOR REFURB DISPATCH
                               </span>
+                              <button
+                                onClick={() => { setSelectedBatchDeviceIds([d.id]); setBatchModalMode('CREATE_NEW'); setBatchStep(1); setShowNewBatch(true); setTab('batches') }}
+                                className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-[11px] rounded-lg shadow-sm transition inline-flex items-center gap-1"
+                                title="Move directly to Repair Batch"
+                              >
+                                <Layers className="w-3.5 h-3.5" /> Repair Batch
+                              </button>
                               <button
                                 onClick={() => moveToReadyToSell(d)}
                                 className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] rounded-lg shadow-sm transition inline-flex items-center gap-1"
@@ -1543,9 +1599,17 @@ export default function InventoryDashboardPage() {
                     <p className="text-xs text-amber-200 font-medium">Track physical handover manifests, dispatch turnaround timers, and 🔴 RE-REPAIR stock flags per batch.</p>
                   </div>
                   {currentUser?.role !== 'REFURB' && (
-                    <button onClick={() => setShowNewBatch(true)} className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs rounded-xl transition shadow-sm flex items-center gap-1.5">
-                      <Plus className="w-4 h-4" /> Create New Repair Batch
-                    </button>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button onClick={() => { setBatchModalMode('CREATE_NEW'); setBatchStep(1); setShowNewBatch(true) }} className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs rounded-xl transition shadow-sm flex items-center gap-1.5">
+                        <Plus className="w-4 h-4" /> Create New Batch
+                      </button>
+                      <button onClick={() => { setBatchModalMode('ADD_TO_EXISTING'); setShowNewBatch(true) }} className="px-3.5 py-2 bg-amber-700 hover:bg-amber-800 text-white font-extrabold text-xs rounded-xl transition shadow-sm flex items-center gap-1.5">
+                        <Layers className="w-4 h-4" /> Add Stock to Existing Batch
+                      </button>
+                      <button onClick={() => setShowScanFaultModal(true)} className="px-3.5 py-2 bg-amber-300 text-amber-950 hover:bg-amber-200 font-black text-xs rounded-xl transition shadow-sm flex items-center gap-1.5">
+                        <Barcode className="w-4 h-4" /> ⚡ Scan IMEI with Faults
+                      </button>
+                    </div>
                   )}
                 </div>
 
@@ -2556,15 +2620,87 @@ export default function InventoryDashboardPage() {
         </div>
       )}
 
-      {/* NEW BATCH MODAL */}
+      {/* BATCH MANAGEMENT MODAL (NEW OR ADD STOCK) */}
       {showNewBatch && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-4 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6 space-y-4">
             <div className="flex justify-between items-center border-b border-gray-200 pb-3">
-              <h3 className="font-extrabold text-base text-gray-900">Create New Refurb Repair Batch</h3>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setBatchModalMode('CREATE_NEW')}
+                  className={`px-3 py-1.5 rounded-lg font-extrabold text-xs transition ${batchModalMode === 'CREATE_NEW' ? 'bg-amber-500 text-white shadow-xs' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                >
+                  ➕ Create New Repair Batch
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBatchModalMode('ADD_TO_EXISTING')}
+                  className={`px-3 py-1.5 rounded-lg font-extrabold text-xs transition ${batchModalMode === 'ADD_TO_EXISTING' ? 'bg-amber-700 text-white shadow-xs' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                >
+                  📥 Add Stock to Existing Batch
+                </button>
+              </div>
               <button onClick={() => setShowNewBatch(false)}><X className="w-5 h-5 text-gray-400" /></button>
             </div>
-            {batchStep === 1 && (
+
+            {batchModalMode === 'ADD_TO_EXISTING' && (
+              <div className="space-y-4 text-xs">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Select Open Active Batch *</label>
+                  <select
+                    value={existingBatchTargetId}
+                    onChange={e => setExistingBatchTargetId(e.target.value)}
+                    className="w-full border border-amber-300 rounded-xl px-3 py-2 text-sm font-bold text-amber-950 bg-amber-50/40"
+                  >
+                    <option value="">-- Choose Existing Active Batch --</option>
+                    {safeBatches.filter(b => b.status === 'SENT' || b.status === 'IN_REPAIR' || b.status === 'PARTIALLY_RETURNED').map(b => (
+                      <option key={b.id} value={b.id}>{b.batchNumber} ({b.refurbCenterName}) — {b.devices.length} units</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <p className="font-bold text-gray-700 uppercase mb-2">Select Stock to Add ({selectableBatchDevices.length} available):</p>
+                  <div className="border border-gray-200 rounded-xl overflow-hidden max-h-56 overflow-y-auto text-xs">
+                    <table className="min-w-full">
+                      <thead className="bg-gray-100 font-bold border-b border-gray-200">
+                        <tr>
+                          <th className="px-3 py-2 w-8"><input type="checkbox" onChange={e => setSelectedBatchDeviceIds(e.target.checked ? selectableBatchDevices.map(d => d.id) : [])} /></th>
+                          <th className="px-3 py-2 text-left">Model</th>
+                          <th className="px-3 py-2 text-left font-mono">IMEI</th>
+                          <th className="px-3 py-2 text-left">Faults</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectableBatchDevices.map(d => (
+                          <tr key={d.id} className="border-b border-gray-100 hover:bg-amber-50 cursor-pointer" onClick={() => setSelectedBatchDeviceIds(p => p.includes(d.id) ? p.filter(x => x !== d.id) : [...p, d.id])}>
+                            <td className="px-3 py-2"><input type="checkbox" checked={selectedBatchDeviceIds.includes(d.id)} readOnly /></td>
+                            <td className="px-3 py-2 font-bold">{d.model} {d.color}</td>
+                            <td className="px-3 py-2 font-mono">{d.imei}</td>
+                            <td className="px-3 py-2 text-orange-900 font-semibold">{d.faults || 'RAW QC DONE'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
+                  <button type="button" onClick={() => setShowNewBatch(false)} className="px-4 py-2 rounded-lg border text-xs font-bold text-gray-600">Cancel</button>
+                  <button
+                    type="button"
+                    disabled={savingBatch || !existingBatchTargetId || selectedBatchDeviceIds.length === 0}
+                    onClick={() => addStockToExistingBatch()}
+                    className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl shadow-md"
+                  >
+                    {savingBatch ? 'Adding...' : `✓ Add ${selectedBatchDeviceIds.length} Unit(s) to Batch`}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {batchModalMode === 'CREATE_NEW' && batchStep === 1 && (
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1">Refurb Center *</label>
@@ -2605,7 +2741,7 @@ export default function InventoryDashboardPage() {
               </div>
             )}
 
-            {batchStep === 2 && (
+            {batchModalMode === 'CREATE_NEW' && batchStep === 2 && (
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1">Batch Number</label>
@@ -4432,6 +4568,198 @@ export default function InventoryDashboardPage() {
                 <button type="submit" disabled={savingEditClient} className="px-5 py-2 rounded-lg bg-cyan-700 hover:bg-cyan-800 text-white font-bold">{savingEditClient ? 'Saving...' : 'Save Account Changes'}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* SCAN IMEI WITH FAULTS MODAL */}
+      {showScanFaultModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center px-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6 space-y-4 my-6">
+            <div className="flex justify-between items-center border-b border-gray-200 pb-3">
+              <h3 className="font-extrabold text-gray-900 text-base flex items-center gap-2">
+                <Barcode className="w-5 h-5 text-amber-600" /> ⚡ Scan IMEI &amp; Manually Log Faults
+              </h3>
+              <button onClick={() => setShowScanFaultModal(false)}><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl space-y-2">
+                <label className="block font-black text-amber-950">15-Digit IMEI Barcode *</label>
+                <input
+                  type="text"
+                  value={scanFaultForm.imei}
+                  onChange={e => setScanFaultForm(f => ({ ...f, imei: e.target.value }))}
+                  placeholder="Point scanner or type 15-digit IMEI..."
+                  className="w-full bg-white border border-amber-300 rounded-lg px-3 py-2 text-sm font-mono font-bold focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  autoFocus
+                />
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Model</label>
+                  <select value={scanFaultForm.model} onChange={e => setScanFaultForm(f => ({ ...f, model: e.target.value }))} className="w-full border border-gray-300 rounded-lg p-2 font-bold">
+                    {MODELS.map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Storage</label>
+                  <select value={scanFaultForm.storage} onChange={e => setScanFaultForm(f => ({ ...f, storage: e.target.value }))} className="w-full border border-gray-300 rounded-lg p-2 font-bold">
+                    {STORAGES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Color</label>
+                  <select value={scanFaultForm.color} onChange={e => setScanFaultForm(f => ({ ...f, color: e.target.value }))} className="w-full border border-gray-300 rounded-lg p-2 font-bold">
+                    {COLORS.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1">Cost (AED)</label>
+                  <input type="number" value={scanFaultForm.costAed} onChange={e => setScanFaultForm(f => ({ ...f, costAed: e.target.value }))} className="w-full border border-gray-300 rounded-lg p-2 font-bold" placeholder="1400" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-900 mb-1">Select / Toggle Hardware Faults:</label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 bg-gray-50 border border-gray-200 p-3 rounded-xl max-h-44 overflow-y-auto">
+                  {DIAG_FIELDS.map(field => {
+                    const active = scanFaultForm.faults.includes(field)
+                    return (
+                      <button
+                        key={field}
+                        type="button"
+                        onClick={() => setScanFaultForm(f => ({
+                          ...f,
+                          faults: active ? f.faults.filter(x => x !== field) : [...f.faults, field]
+                        }))}
+                        className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-left border transition flex items-center justify-between ${
+                          active ? 'bg-orange-500 text-white border-orange-600 shadow-xs' : 'bg-white text-gray-700 border-gray-300 hover:border-orange-400'
+                        }`}
+                      >
+                        <span>{field}</span>
+                        {active && <Check className="w-3.5 h-3.5 text-white" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Additional Fault Notes</label>
+                <input
+                  type="text"
+                  value={scanFaultForm.notes}
+                  onChange={e => setScanFaultForm(f => ({ ...f, notes: e.target.value }))}
+                  placeholder="e.g. Broken LCD flex cable, battery health 78%..."
+                  className="w-full border border-gray-300 rounded-lg p-2"
+                />
+              </div>
+
+              <div className="bg-amber-50 border border-amber-300 p-3 rounded-xl space-y-2">
+                <label className="block font-black text-amber-950">Select Destination for Scanned Device:</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setScanFaultForm(f => ({ ...f, destination: 'REPAIR_BATCH' }))}
+                    className={`py-2 px-3 rounded-lg font-extrabold text-xs border ${scanFaultForm.destination === 'REPAIR_BATCH' ? 'bg-amber-600 text-white border-amber-700' : 'bg-white text-amber-950 border-amber-300'}`}
+                  >
+                    📥 Repair Batch
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setScanFaultForm(f => ({ ...f, destination: 'READY_TO_SELL' }))}
+                    className={`py-2 px-3 rounded-lg font-extrabold text-xs border ${scanFaultForm.destination === 'READY_TO_SELL' ? 'bg-emerald-600 text-white border-emerald-700' : 'bg-white text-emerald-950 border-emerald-300'}`}
+                  >
+                    🟢 Ready to Sell
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setScanFaultForm(f => ({ ...f, destination: 'RAW_QC_DONE' }))}
+                    className={`py-2 px-3 rounded-lg font-extrabold text-xs border ${scanFaultForm.destination === 'RAW_QC_DONE' ? 'bg-teal-600 text-white border-teal-700' : 'bg-white text-teal-950 border-teal-300'}`}
+                  >
+                    📋 Raw QC Done
+                  </button>
+                </div>
+
+                {scanFaultForm.destination === 'REPAIR_BATCH' && (
+                  <div className="pt-2">
+                    <label className="block font-bold text-amber-900 mb-1">Target Repair Batch</label>
+                    <select
+                      value={scanFaultForm.targetBatchId}
+                      onChange={e => setScanFaultForm(f => ({ ...f, targetBatchId: e.target.value }))}
+                      className="w-full border border-amber-300 rounded-lg p-2 font-bold text-amber-950 bg-white"
+                    >
+                      <option value="">-- Create New Batch or Select Open Batch --</option>
+                      {safeBatches.filter(b => b.status === 'SENT' || b.status === 'IN_REPAIR' || b.status === 'PARTIALLY_RETURNED').map(b => (
+                        <option key={b.id} value={b.id}>{b.batchNumber} ({b.refurbCenterName})</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
+              <button type="button" onClick={() => setShowScanFaultModal(false)} className="px-4 py-2 rounded-lg border text-xs font-bold text-gray-600">Cancel</button>
+              <button
+                type="button"
+                disabled={!scanFaultForm.imei.trim()}
+                onClick={async () => {
+                  const faultsStr = [...scanFaultForm.faults, scanFaultForm.notes].filter(Boolean).join(', ')
+                  const devRes = await fetch('/api/devices', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      imei: scanFaultForm.imei.trim(),
+                      model: scanFaultForm.model,
+                      storage: scanFaultForm.storage,
+                      color: scanFaultForm.color,
+                      costAed: Number(scanFaultForm.costAed) || 0,
+                      faults: faultsStr
+                    })
+                  })
+                  const newDev = await devRes.json()
+                  if (!devRes.ok) {
+                    showToast(newDev.error || 'Failed to intake device', false)
+                    return
+                  }
+
+                  if (scanFaultForm.destination === 'READY_TO_SELL') {
+                    await moveToReadyToSell(newDev)
+                  } else if (scanFaultForm.destination === 'REPAIR_BATCH') {
+                    if (scanFaultForm.targetBatchId) {
+                      await addStockToExistingBatch(scanFaultForm.targetBatchId, [newDev.id])
+                    } else {
+                      setSelectedBatchDeviceIds([newDev.id])
+                      setBatchModalMode('CREATE_NEW')
+                      setBatchStep(1)
+                      setShowNewBatch(true)
+                      setTab('batches')
+                    }
+                  } else {
+                    showToast(`📋 ${newDev.model} (${newDev.imei}) saved to Raw QC Stock with logged faults!`)
+                  }
+                  await loadData()
+                  setShowScanFaultModal(false)
+                  setScanFaultForm({
+                    imei: '',
+                    model: '15 PRO',
+                    storage: '128GB',
+                    color: 'BLACK',
+                    costAed: '1400',
+                    faults: [],
+                    notes: '',
+                    destination: 'REPAIR_BATCH',
+                    targetBatchId: ''
+                  })
+                }}
+                className="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs rounded-xl shadow-md"
+              >
+                ✓ Process Device &amp; Save
+              </button>
+            </div>
           </div>
         </div>
       )}

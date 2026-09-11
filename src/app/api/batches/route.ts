@@ -45,9 +45,7 @@ export async function POST(req: NextRequest) {
   for (const did of deviceIds) {
     const dev = db.devices.find(d => d.id === did)
     if (!dev) continue
-    if (dev.status === 'RAW_STOCK' && !dev.initialQcReport) {
-      return NextResponse.json({ error: `Device ${dev.imei} (${dev.model}) has not completed Initial QC. Only stock with completed Initial QC (RAW QC DONE) is eligible for repair dispatch.` }, { status: 400 })
-    }
+    if (dev.status === 'SOLD') continue
     batchDevices.push({
       deviceId: dev.id,
       imei: dev.imei,
