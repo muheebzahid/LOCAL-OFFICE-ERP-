@@ -45,6 +45,13 @@ function createWindow() {
       ],
     },
     {
+      label: 'Server',
+      submenu: [
+        { label: 'Connect to Online Master ERP (164.90.177.211)', click: () => mainWindow.loadURL('http://164.90.177.211') },
+        { label: 'Connect to Local Hosted ERP (localhost:3006)', click: () => mainWindow.loadURL('http://localhost:3006') },
+      ],
+    },
+    {
       label: 'Window',
       submenu: [
         { role: 'minimize' },
@@ -74,8 +81,17 @@ function createWindow() {
   const menu = Menu.buildFromTemplate(menuTemplate)
   Menu.setApplicationMenu(menu)
 
-  // Load Cloud ERP
-  mainWindow.loadURL(SERVER_URL)
+  // Load Cloud ERP with failover to local ERP
+  mainWindow.loadURL(SERVER_URL).catch(() => {
+    mainWindow.loadURL('http://localhost:3006').catch(() => {})
+  })
+
+  // Automatic failover if connection to primary server times out or fails
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, _errorDescription, validatedURL) => {
+    if (validatedURL && !validatedURL.includes('localhost:3006')) {
+      mainWindow.loadURL('http://localhost:3006').catch(() => {})
+    }
+  })
 
   // Handle external links safely
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
